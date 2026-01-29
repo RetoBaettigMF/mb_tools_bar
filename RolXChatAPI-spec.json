@@ -1,0 +1,75 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Query timesheet entries",
+    "description": "Retrieves timesheet entries for the company",
+    "version": "v1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://controlling-assistant-prod.nicedune-9fff3676.switzerlandnorth.azurecontainerapps.io"
+    }
+  ],
+  "paths": {
+    "/rolx/query": {
+      "post": {
+        "description": "Query timesheet data using a natural language request",
+        "operationId": "Query",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "string",
+                    "description": "A request to get information about timesheet entries, e.g. 'how many hours did Reto Bättig work in 2025 per task'"
+                  }
+                },
+                "required": ["request"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          }
+        }
+      }
+    },
+    "/bexio/query": {
+      "post": {
+        "description": "Query invoices from accounting software",
+        "operationId": "Query",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "request": {
+                    "type": "string",
+                    "description": "A request to get information about an invoice, e.g. 'give me the invoice #0290.001.01.01' or 'give me all invoices with Project Number 290' or 'give me all invoices for Subproject #0290.001'"
+                  }
+                },
+                "required": ["request"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful response"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {}
+  }
+}
+
