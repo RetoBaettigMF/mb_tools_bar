@@ -5,7 +5,8 @@ MB Tools - CLI for RolX and Bexio queries
 import os
 import sys
 import json
-import requests
+import urllib.request
+import urllib.parse
 from typing import Optional
 
 API_BASE_URL = "https://controlling-assistant-prod.nicedune-9fff3676.switzerlandnorth.azurecontainerapps.io"
@@ -36,15 +37,15 @@ def query_api(endpoint: str, request_text: str) -> dict:
     url = f"{API_BASE_URL}/{endpoint}/query"
     headers = {
         'Content-Type': 'application/json',
-        'x-api-key': api_key
+        'Authorization': f'Bearer {api_key}'
     }
-    payload = {'request': request_text}
+    payload = json.dumps({'request': request_text}).encode('utf-8')
     
     try:
-        response = requests.post(url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json()
-    except requests.exceptions.RequestException as e:
+        req = urllib.request.Request(url, data=payload, headers=headers, method='POST')
+        with urllib.request.urlopen(req, timeout=30) as response:
+            return json.loads(response.read().decode('utf-8'))
+    except Exception as e:
         print(f"Error: API request failed: {e}", file=sys.stderr)
         sys.exit(1)
 
