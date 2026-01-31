@@ -95,6 +95,46 @@ The reminder email is sent from Reto's account and includes:
 - Friendly reminder to update sales potentials
 - Signature from "Retos Bot Morticia 💪"
 
+## Cudos CRM Tool
+
+Quick access to the Cudos vTiger CRM system for searching contacts and companies.
+
+### CRM Access
+
+- **System:** vTiger CRM
+- **URL:** https://mf250.co.crm-now.de/index.php
+- **Direct Contacts:** https://mf250.co.crm-now.de/index.php?module=Contacts&view=List
+- **Login:** bar / Reb@g96vtig
+
+### Usage
+
+**Search for a person/contact:**
+```bash
+./cudos_crm.py person "Max Mustermann"
+```
+
+**Search for a company/account:**
+```bash
+./cudos_crm.py company "Cudos AG"
+```
+
+**Show CRM connection info:**
+```bash
+./cudos_crm.py info
+```
+
+### Note on Automation
+
+This tool provides quick access credentials and URLs. For automated CRM searches, 
+use OpenClaw's browser tool which can log in and navigate the CRM interface.
+
+Example browser automation flow:
+1. Navigate to login URL
+2. Enter credentials (bar / Reb@g96vtig)
+3. Go to Contacts or Accounts list
+4. Use search functionality
+5. Extract results
+
 ## Development
 
 More tools coming soon...
