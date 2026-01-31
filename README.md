@@ -57,6 +57,44 @@ Base URL: `https://controlling-assistant-prod.nicedune-9fff3676.switzerlandnorth
 
 See [RolXChatAPI-spec.json](./RolXChatAPI-spec.json) for the complete API definition.
 
+## Sales Potential Reminder Tool
+
+Automated reminder that sends an email on the **Wednesday before the 4th Monday** of each month (typically the 3rd Wednesday).
+
+### Usage
+
+```bash
+python3 sales_reminder.py <recipient_email>
+```
+
+**Example:**
+```bash
+python3 sales_reminder.py bu@cudos.ch
+```
+
+### How it works
+
+- Checks if today is the Wednesday before the 4th Monday of the month
+- If yes: Sends reminder email via `gog` to update sales potentials
+- If no: Exits silently (designed for weekly cron jobs)
+
+### Cron Setup
+
+To run automatically every Wednesday at 09:00:
+
+```bash
+# Add to crontab (crontab -e)
+0 9 * * 3 cd /home/reto/Development/mb_tools_bar && python3 sales_reminder.py bu@cudos.ch
+```
+
+Or use OpenClaw's cron system for session-based execution.
+
+### Email Content
+
+The reminder email is sent from Reto's account and includes:
+- Friendly reminder to update sales potentials
+- Signature from "Retos Bot Morticia 💪"
+
 ## Development
 
 More tools coming soon...
