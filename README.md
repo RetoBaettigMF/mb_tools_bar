@@ -99,12 +99,27 @@ The reminder email is sent from Reto's account and includes:
 
 Quick access to the Cudos vTiger CRM system for searching contacts and companies.
 
-### CRM Access
+### Configuration
 
-- **System:** vTiger CRM
-- **URL:** https://mf250.co.crm-now.de/index.php
-- **Direct Contacts:** https://mf250.co.crm-now.de/index.php?module=Contacts&view=List
-- **Login:** bar / Reb@g96vtig
+Create a config file at `~/.mbtools/crm_config.json`:
+
+```json
+{
+  "crm_base_url": "https://mf250.co.crm-now.de",
+  "crm_username": "bar",
+  "crm_password": "your-password-here"
+}
+```
+
+Or set environment variables:
+
+```bash
+export CUDOS_CRM_URL="https://mf250.co.crm-now.de"
+export CUDOS_CRM_USER="bar"
+export CUDOS_CRM_PASSWORD="your-password-here"
+```
+
+**Note:** The `crm_config.json` file is in `.gitignore` to prevent accidental commits of credentials.
 
 ### Usage
 
@@ -123,6 +138,14 @@ Quick access to the Cudos vTiger CRM system for searching contacts and companies
 ./cudos_crm.py info
 ```
 
+### CRM Access URLs
+
+- **System:** vTiger CRM
+- **Base URL:** https://mf250.co.crm-now.de
+- **Login:** https://mf250.co.crm-now.de/index.php
+- **Contacts (Personen):** https://mf250.co.crm-now.de/index.php?module=Contacts&view=List
+- **Accounts (Firmen):** https://mf250.co.crm-now.de/index.php?module=Accounts&view=List
+
 ### Note on Automation
 
 This tool provides quick access credentials and URLs. For automated CRM searches, 
@@ -130,7 +153,7 @@ use OpenClaw's browser tool which can log in and navigate the CRM interface.
 
 Example browser automation flow:
 1. Navigate to login URL
-2. Enter credentials (bar / Reb@g96vtig)
+2. Enter credentials
 3. Go to Contacts or Accounts list
 4. Use search functionality
 5. Extract results
