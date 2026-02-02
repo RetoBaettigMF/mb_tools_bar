@@ -190,6 +190,180 @@ def replace_text(doc_id: str, old_text: str, new_text: str) -> dict:
     except Exception as e:
         return {"error": str(e)}
 
+def insert_formatted_text(doc_id: str, text: str, index: int) -> dict:
+    """Insert text with Markdown-like formatting support.
+    
+    Supported formats:
+    - # Heading 1
+    - ## Heading 2  
+    - ### Heading 3
+    - **bold text**
+    - *italic text*
+    """
+    try:
+        service = get_docs_service()
+        
+        # Parse markdown-like text into segments
+        lines = text.split('\n')
+        requests = []
+        current_index = index
+        
+        import re
+        
+        for line in lines:
+            if not line:
+                # Empty line - just insert newline
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': '\n'
+                    }
+                })
+                current_index += 1
+                continue
+            
+            # Check for heading
+            heading_match = re.match(r'^(#{1,3})\s+(.+)$', line)
+            if heading_match:
+                level = len(heading_match.group(1))
+                content = heading_match.group(2)
+                
+                # Insert the text
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': content + '\n'
+                    }
+                })
+                
+                # Apply heading style
+                style_name = f'HEADING_{level}'
+                requests.append({
+                    'updateParagraphStyle': {
+                        'range': {
+                            'startIndex': current_index,
+                            'endIndex': current_index + len(content) + 1
+                        },
+                        'paragraphStyle': {
+                            'namedStyleType': style_name
+                        },
+                        'fields': 'namedStyleType'
+                    }
+                })
+                current_index += len(content) + 1
+            else:
+                # Regular text - check for bold/italic
+                segments = []
+                remaining = line
+                
+                # Pattern for bold and italic
+                bold_pattern = r'\*\*(.+?)\*\*'
+                italic_pattern = r'\*(.+?)\*'
+                
+                # Simple approach: insert line, then apply formatting
+                requests.append({
+                    'insertText': {
+                        'location': {'index': current_index},
+                        'text': line + '\n'
+                    }
+                })
+                
+                # Find all formatting and apply
+                line_start = current_index
+                
+                # Apply bold formatting
+                for match in re.finditer(bold_pattern, line):
+                    bold_text = match.group(1)
+                    start = line_start + match.start()
+                    end = line_start + match.end()
+                    requests.append({
+                        'updateTextStyle': {
+                            'range': {
+                                'startIndex': start,
+                                'endIndex': end
+                            },
+                            'textStyle': {
+                                'bold': True
+                            },
+                            'fields': 'bold'
+                        }
+                    })
+                    # Update the text to remove **
+                    requests.append({
+                        'replaceAllText': {
+                            'containsText': {
+                                'text': '**' + bold_text + '**',
+                                'matchCase': True
+                            },
+                            'replaceText': bold_text
+                        }
+                    })
+                
+                # Apply italic formatting
+                for match in re.finditer(italic_pattern, line):
+                    # Skip if it's part of bold (**)
+                    if match.start() > 0 and line[match.start()-1:match.start()+1] == '**':
+                        continue
+                    if match.end() < len(line) and line[match.end()-1:match.end()+1] == '**':
+                        continue
+                    
+                    italic_text = match.group(1)
+                    start = line_start + match.start()
+                    end = line_start + match.end()
+                    requests.append({
+                        'updateTextStyle': {
+                            'range': {
+                                'startIndex': start,
+                                'endIndex': end
+                            },
+                            'textStyle': {
+                                'italic': True
+                            },
+                            'fields': 'italic'
+                        }
+                    })
+                    # Update the text to remove *
+                    requests.append({
+                        'replaceAllText': {
+                            'containsText': {
+                                'text': '*' + italic_text + '*',
+                                'matchCase': True
+                            },
+                            'replaceText': italic_text
+                        }
+                    })
+                
+                # Ensure normal paragraph style
+                requests.append({
+                    'updateParagraphStyle': {
+                        'range': {
+                            'startIndex': line_start,
+                            'endIndex': line_start + len(line) + 1
+                        },
+                        'paragraphStyle': {
+                            'namedStyleType': 'NORMAL_TEXT'
+                        },
+                        'fields': 'namedStyleType'
+                    }
+                })
+                
+                current_index += len(line) + 1
+        
+        # Execute all requests
+        result = service.documents().batchUpdate(
+            documentId=doc_id,
+            body={'requests': requests}
+        ).execute()
+        
+        return {
+            "success": True,
+            "insertedCharacters": current_index - index,
+            "startIndex": index,
+            "endIndex": current_index
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
 def handle_request(request: dict) -> dict:
     """Handle MCP tool requests."""
     method = request.get('method')
@@ -248,6 +422,44 @@ def handle_request(request: dict) -> dict:
                         },
                         "required": ["documentId", "oldText", "newText"]
                     }
+                },
+                {
+                    "name": "docs_insert_formatted",
+                    "description": "Insert formatted text with Markdown-like syntax (# Heading, ## Heading 2, **bold**, *italic*). Use # for Heading 1 and no prefix for normal text.",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "documentId": {"type": "string", "description": "Google Doc ID"},
+                            "text": {"type": "string", "description": "Text to insert with Markdown formatting (# Heading, **bold**, *italic*)"},
+                            "index": {"type": "integer", "description": "Position index (0-based)"}
+                        },
+                        "required": ["documentId", "text", "index"]
+                    }
+                },
+                {
+                    "name": "docs_format_as_heading",
+                    "description": "Format existing text as Heading 1, 2, or 3",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "documentId": {"type": "string", "description": "Google Doc ID"},
+                            "text": {"type": "string", "description": "Exact text to find and format"},
+                            "level": {"type": "integer", "description": "Heading level (1, 2, or 3)", "default": 1}
+                        },
+                        "required": ["documentId", "text"]
+                    }
+                },
+                {
+                    "name": "docs_format_as_normal",
+                    "description": "Format existing text as Normal Text (removes heading formatting)",
+                    "inputSchema": {
+                        "type": "object",
+                        "properties": {
+                            "documentId": {"type": "string", "description": "Google Doc ID"},
+                            "text": {"type": "string", "description": "Exact text to find and format"}
+                        },
+                        "required": ["documentId", "text"]
+                    }
                 }
             ]
         }
@@ -267,6 +479,12 @@ def handle_request(request: dict) -> dict:
             result = insert_at_position(doc_id, args.get('text', ''), args.get('index', 1))
         elif tool_name == 'docs_replace':
             result = replace_text(doc_id, args.get('oldText', ''), args.get('newText', ''))
+        elif tool_name == 'docs_insert_formatted':
+            result = insert_formatted_text(doc_id, args.get('text', ''), args.get('index', 1))
+        elif tool_name == 'docs_format_as_heading':
+            result = format_text_as_heading(doc_id, args.get('text', ''), args.get('level', 1))
+        elif tool_name == 'docs_format_as_normal':
+            result = format_text_as_normal(doc_id, args.get('text', ''))
         else:
             result = {"error": f"Unknown tool: {tool_name}"}
         
@@ -282,6 +500,115 @@ def handle_request(request: dict) -> dict:
         }
     
     return {"error": f"Unknown method: {method}"}
+
+def format_text_as_heading(doc_id: str, text_to_find: str, heading_level: int = 1) -> dict:
+    """Find text and format it as heading."""
+    try:
+        service = get_docs_service()
+        
+        # Get document to find the text
+        doc = service.documents().get(documentId=doc_id).execute()
+        content = doc.get('body', {}).get('content', [])
+        
+        # Find the text in the document
+        full_text = ""
+        for element in content:
+            if 'paragraph' in element:
+                for elem in element['paragraph'].get('elements', []):
+                    if 'textRun' in elem:
+                        full_text += elem['textRun'].get('content', '')
+        
+        # Find the position
+        pos = full_text.find(text_to_find)
+        if pos == -1:
+            return {"error": f"Text not found: {text_to_find}"}
+        
+        start_index = pos + 1  # Google Docs uses 1-based indexing
+        end_index = start_index + len(text_to_find)
+        
+        # Apply heading style
+        style_name = f'HEADING_{heading_level}'
+        requests = [{
+            'updateParagraphStyle': {
+                'range': {
+                    'startIndex': start_index,
+                    'endIndex': end_index
+                },
+                'paragraphStyle': {
+                    'namedStyleType': style_name
+                },
+                'fields': 'namedStyleType'
+            }
+        }]
+        
+        result = service.documents().batchUpdate(
+            documentId=doc_id,
+            body={'requests': requests}
+        ).execute()
+        
+        return {
+            "success": True,
+            "formattedText": text_to_find,
+            "headingLevel": heading_level,
+            "startIndex": start_index,
+            "endIndex": end_index
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+def format_text_as_normal(doc_id: str, text_to_find: str) -> dict:
+    """Find text and format it as normal text."""
+    try:
+        service = get_docs_service()
+        
+        # Get document to find the text
+        doc = service.documents().get(documentId=doc_id).execute()
+        content = doc.get('body', {}).get('content', [])
+        
+        # Find the text in the document
+        full_text = ""
+        for element in content:
+            if 'paragraph' in element:
+                for elem in element['paragraph'].get('elements', []):
+                    if 'textRun' in elem:
+                        full_text += elem['textRun'].get('content', '')
+        
+        # Find the position
+        pos = full_text.find(text_to_find)
+        if pos == -1:
+            return {"error": f"Text not found: {text_to_find}"}
+        
+        start_index = pos + 1  # Google Docs uses 1-based indexing
+        end_index = start_index + len(text_to_find)
+        
+        # Apply normal text style
+        requests = [{
+            'updateParagraphStyle': {
+                'range': {
+                    'startIndex': start_index,
+                    'endIndex': end_index
+                },
+                'paragraphStyle': {
+                    'namedStyleType': 'NORMAL_TEXT'
+                },
+                'fields': 'namedStyleType'
+            }
+        }]
+        
+        result = service.documents().batchUpdate(
+            documentId=doc_id,
+            body={'requests': requests}
+        ).execute()
+        
+        return {
+            "success": True,
+            "formattedText": text_to_find,
+            "style": "NORMAL_TEXT",
+            "startIndex": start_index,
+            "endIndex": end_index
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 def main():
     log("Google Docs MCP Server starting...")
