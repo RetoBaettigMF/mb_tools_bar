@@ -1,0 +1,147 @@
+#!/usr/bin/env python3
+"""Simple CLI to call MCP servers directly"""
+import subprocess
+import json
+import sys
+
+SERVERS = {
+    "google-docs": "/home/reto/Development/mb_tools_bar/GoogleDocsMCPServer/server.py",
+    "cudos-controlling": "/home/reto/Development/mb_tools_bar/CudosControllingMCPServer/server.py"
+}
+
+PYTHON = "/home/reto/Development/mb_tools_bar/venv/bin/python3"
+
+def call_mcp_tool(server_name, tool_name, **kwargs):
+    """Call an MCP tool and return the result"""
+    if server_name not in SERVERS:
+        print(f"Error: Unknown server '{server_name}'", file=sys.stderr)
+        print(f"Available servers: {', '.join(SERVERS.keys())}", file=sys.stderr)
+        sys.exit(1)
+
+    server_path = SERVERS[server_name]
+
+    # Start the server
+    proc = subprocess.Popen(
+        [PYTHON, server_path],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    try:
+        # Initialize
+        init_req = {"method": "initialize", "params": {"protocolVersion": "2025-11-25"}, "id": 1}
+        proc.stdin.write(json.dumps(init_req) + "\n")
+        proc.stdin.flush()
+        proc.stdout.readline()  # Read and discard init response
+
+        # Call the tool
+        tool_req = {
+            "method": "tools/call",
+            "params": {
+                "name": tool_name,
+                "arguments": kwargs
+            },
+            "id": 2
+        }
+        proc.stdin.write(json.dumps(tool_req) + "\n")
+        proc.stdin.flush()
+
+        # Read response
+        response_line = proc.stdout.readline()
+        response = json.loads(response_line)
+
+        if "content" in response:
+            # Extract text from content blocks
+            for block in response["content"]:
+                if block["type"] == "text":
+                    result = json.loads(block["text"])
+                    print(json.dumps(result, indent=2, ensure_ascii=False))
+        elif "error" in response:
+            print(f"Error: {response['error']}", file=sys.stderr)
+            sys.exit(1)
+        else:
+            print(json.dumps(response, indent=2))
+
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    finally:
+        proc.terminate()
+
+def list_tools(server_name=None):
+    """List all available tools"""
+    servers_to_check = [server_name] if server_name else SERVERS.keys()
+
+    for srv in servers_to_check:
+        server_path = SERVERS[srv]
+        proc = subprocess.Popen(
+            [PYTHON, server_path],
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True
+        )
+
+        try:
+            # Initialize
+            init_req = {"method": "initialize", "params": {"protocolVersion": "2025-11-25"}, "id": 1}
+            proc.stdin.write(json.dumps(init_req) + "\n")
+            proc.stdin.flush()
+            proc.stdout.readline()
+
+            # Get tools list
+            tools_req = {"method": "tools/list", "params": {}, "id": 2}
+            proc.stdin.write(json.dumps(tools_req) + "\n")
+            proc.stdin.flush()
+
+            response = json.loads(proc.stdout.readline())
+
+            print(f"\n{srv}:")
+            for tool in response.get("tools", []):
+                print(f"  • {tool['name']}")
+                print(f"    {tool['description']}")
+
+        except Exception as e:
+            print(f"Error listing tools for {srv}: {e}", file=sys.stderr)
+        finally:
+            proc.terminate()
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage:")
+        print("  mcp-cli list                           # List all tools")
+        print("  mcp-cli <server>.<tool> key=value ...  # Call a tool")
+        print("")
+        print("Examples:")
+        print('  mcp-cli cudos-controlling.controlling_query_rolx query="Show me time entries"')
+        print('  mcp-cli google-docs.docs_read documentId=XXX maxLines=50')
+        sys.exit(1)
+
+    command = sys.argv[1]
+
+    if command == "list":
+        list_tools()
+    elif "." in command:
+        # Parse server.tool
+        server_name, tool_name = command.split(".", 1)
+
+        # Parse arguments (key=value pairs)
+        kwargs = {}
+        for arg in sys.argv[2:]:
+            if "=" in arg:
+                key, value = arg.split("=", 1)
+                # Try to parse as JSON, otherwise use as string
+                try:
+                    kwargs[key] = json.loads(value)
+                except:
+                    kwargs[key] = value
+
+        call_mcp_tool(server_name, tool_name, **kwargs)
+    else:
+        print(f"Error: Invalid command '{command}'", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == '__main__':
+    main()

@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "cudos-controlling": {
+      "command": "/home/reto/Development/mb_tools_bar/venv/bin/python3",
+      "args": ["/home/reto/Development/mb_tools_bar/CudosControllingMCPServer/server.py"]
+    }
+  },
+  "imports": []
+}

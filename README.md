@@ -1,141 +1,193 @@
-# mb_tools_bar
+# OpenClaw.ai Toolbox
 
-Custom extensions and tools for moltbot.
+Collection of MCP servers and CLI tools for Cudos internal systems, designed for use with OpenClaw.ai.
 
-## RolX/Bexio Query Tool
+## Quick Start
 
-CLI tool for querying RolX (time tracking) and Bexio (invoicing) via natural language.
+### 1. Setup Environment Variables
 
-### Installation
-
-```bash
-cd mb_tools_bar
-pip install -r requirements.txt
-chmod +x mbtools.py
-```
-
-### Configuration
-
-Set your API key via environment variable:
+Copy the example environment file and add your secrets:
 
 ```bash
-export MBTOOLS_API_KEY="your-api-key-here"
+cp .env.example .env
+# Edit .env and add your MBTOOLS_API_KEY
 ```
 
-Or create a config file at `~/.mbtools/config.json`:
-
-```json
-{
-  "api_key": "your-api-key-here"
-}
-```
-
-### Usage
-
-**Query RolX (time tracking):**
-```bash
-./mbtools.py rolx "How many hours did Reto Bättig work in 2025 per task"
-./mbtools.py rolx "Show all hours for project 0123.110"
-```
-
-**Query Bexio (invoicing):**
-```bash
-./mbtools.py bexio "Give me invoice #0290.001.01.01"
-./mbtools.py bexio "Show all invoices with Project Number 290"
-./mbtools.py bexio "Give me all invoices for Subproject #0290.001"
-```
-
-### API Endpoints
-
-The tool connects to:
-- **RolX:** `POST /rolx/query` - Natural language queries for timesheet data
-- **Bexio:** `POST /bexio/query` - Natural language queries for invoice data
-
-Base URL: `https://controlling-assistant-prod.nicedune-9fff3676.switzerlandnorth.azurecontainerapps.io`
-
-### OpenAPI Specification
-
-See [RolXChatAPI-spec.json](./RolXChatAPI-spec.json) for the complete API definition.
-
-## Sales Potential Reminder Tool
-
-Automated reminder that sends an email on the **Wednesday before the 4th Monday** of each month (typically the 3rd Wednesday).
-
-### Usage
+### 2. Setup Virtual Environment
 
 ```bash
-python3 sales_reminder.py <recipient_email>
+bash setup_venv.sh
+source venv/bin/activate
 ```
 
-**Example:**
+### 3. Configure Tools
+
+Each tool has its own setup requirements. See individual tool READMEs for details.
+
+## Tools Overview
+
+### 🔧 MCP Servers
+
+#### [GoogleDocsMCPServer](./GoogleDocsMCPServer/README.md)
+
+Edit Google Docs via MCP protocol.
+
+**Tools:**
+- `docs_read` - Read with pagination
+- `docs_append` - Append text
+- `docs_insert` - Insert at position
+- `docs_replace` - Replace text
+- `docs_insert_formatted` - Insert with Markdown-like formatting
+- `docs_format_as_heading` - Convert text to heading
+- `docs_format_as_normal` - Convert text to normal style
+
+**Setup:**
 ```bash
-python3 sales_reminder.py bu@cudos.ch
+# One-time OAuth
+python3 GoogleDocsMCPServer/setup_auth.py
+
+# Register with mcporter
+mcporter config add google-docs --command "python3 $(pwd)/google-docs-mcp"
 ```
 
-### How it works
-
-- Checks if today is the Wednesday before the 4th Monday of the month
-- If yes: Sends reminder email via `gog` to update sales potentials
-- If no: Exits silently (designed for weekly cron jobs)
-
-### Cron Setup
-
-To run automatically every Wednesday at 09:00:
-
+**Usage:**
 ```bash
-# Add to crontab (crontab -e)
-0 9 * * 3 cd /home/reto/Development/mb_tools_bar && python3 sales_reminder.py bu@cudos.ch
+mcporter call google-docs.docs_read documentId=<doc-id> maxLines=50
 ```
-
-Or use OpenClaw's cron system for session-based execution.
-
-### Email Content
-
-The reminder email is sent from Reto's account and includes:
-- Friendly reminder to update sales potentials
-- Signature from "Retos Bot Morticia 💪"
-
-## Google Docs MCP Server
-
-MCP-Server für das Editieren von Google Docs direkt aus OpenClaw.
-
-### Files
-
-- `mcp_server_google_docs.py` - Der MCP-Server
-- `setup_docs_auth.py` - Setup-Skript für OAuth
-
-### Features
-
-- `docs_read` - Dokument lesen mit Pagination (Standard: 100 Zeilen)
-- `docs_append` - Text ans Ende anhängen
-- `docs_insert` - Text an bestimmter Position einfügen
-- `docs_replace` - Text ersetzen
-
-### Setup
-
-1. **Auth einrichten (einmalig):**
-   ```bash
-   python3 setup_docs_auth.py
-   ```
-   Dann im Browser mit `bar.ai.bot@cudos.ch` anmelden.
-
-2. **Mit mcporter nutzen:**
-   ```bash
-   mcporter config add google-docs --command "python3 /home/reto/Development/mb_tools_bar/mcp_server_google_docs.py"
-   
-   # Dokument lesen
-   mcporter call google-docs.docs_read documentId=XXX maxLines=50
-   
-   # Text ersetzen/einfügen
-   mcporter call google-docs.docs_replace documentId=XXX oldText="..." newText="..."
-   ```
-
-### Account
-
-Verwendetes Konto: `bar.ai.bot@cudos.ch` (eigener Google Account von Morticia)
 
 ---
 
+#### [CudosControllingMCPServer](./CudosControllingMCPServer/README.md)
+
+Query RolX (timesheet) and Bexio (invoicing) via natural language.
+
+**Tools:**
+- `controlling_query_rolx` - Query timesheet data
+- `controlling_query_bexio` - Query invoice data
+
+**Setup:**
+```bash
+# Set API key (either in .env file or export)
+echo 'MBTOOLS_API_KEY=your-key' >> .env
+# Or: export MBTOOLS_API_KEY="your-key"
+
+# Register with mcporter
+mcporter config add cudos-controlling --command "python3 $(pwd)/cudos-controlling-mcp"
+```
+
+**Usage:**
+```bash
+mcporter call cudos-controlling.controlling_query_rolx \
+    query="How many hours did Reto Bättig work in 2025 per task"
+
+mcporter call cudos-controlling.controlling_query_bexio \
+    query="Give me invoice #0290.001.01.01"
+```
+
+---
+
+### 🛠️ CLI Tools
+
+#### [SalesReminderTool](./SalesReminderTool/README.md)
+
+Automated email reminder sent on the Wednesday before the 4th Monday of each month.
+
+**Setup:**
+```bash
+# Add to crontab
+crontab -e
+# Add: 0 9 * * 3 python3 /path/to/sales-reminder bu@cudos.ch
+```
+
+**Manual usage:**
+```bash
+python3 sales-reminder recipient@example.com
+```
+
+## Architecture
+
+```
+openclaw_toolbox/
+├── venv/                           # Shared virtual environment
+├── GoogleDocsMCPServer/
+│   ├── server.py                   # MCP server
+│   ├── setup_auth.py               # OAuth setup
+│   └── README.md
+├── CudosControllingMCPServer/
+│   ├── server.py                   # MCP server
+│   └── README.md
+├── SalesReminderTool/
+│   ├── sales_reminder.py           # CLI tool
+│   └── README.md
+├── google-docs-mcp                 # Symlink → GoogleDocsMCPServer/server.py
+├── cudos-controlling-mcp           # Symlink → CudosControllingMCPServer/server.py
+├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
+├── requirements.txt                # All dependencies
+├── setup_venv.sh                   # Virtual environment setup
+├── README.md                       # This file
+└── CLAUDE.md                       # Development guidelines
+```
+
+## MCP Server Pattern
+
+All MCP servers follow the same architecture:
+
+1. **stdin/stdout communication** - JSON-RPC style protocol
+2. **Standard handlers**:
+   - `initialize` - Return protocol version and capabilities
+   - `tools/list` - Return available tools
+   - `tools/call` - Execute tool calls
+3. **stderr logging** - Use `log()` function for debugging
+4. **Consistent error handling** - Return structured error messages
+
+## Dependencies
+
+### Core (shared)
+- `requests>=2.31.0`
+
+### Google Docs MCP Server
+- `google-api-python-client>=2.0.0`
+- `google-auth-httplib2>=0.1.0`
+- `google-auth-oauthlib>=0.5.0`
+
+### Cudos Controlling MCP Server
+- Python stdlib only (urllib, json)
+
+### Sales Reminder Tool
+- Python stdlib only (calendar, datetime)
+
+Install all dependencies:
+```bash
+pip install -r requirements.txt
+```
+
 ## Development
 
-More tools coming soon...
+### Adding a New Tool
+
+1. Create directory: `NewToolMCPServer/` or `NewToolCLI/`
+2. Add `server.py` (MCP) or main script (CLI)
+3. Create tool-specific `README.md`
+4. Add dependencies to `requirements.txt`
+5. Create symlink in root: `ln -s NewToolMCPServer/server.py new-tool-mcp`
+6. Update this README
+
+### Testing MCP Servers
+
+Use `mcporter` for testing:
+
+```bash
+# List tools
+mcporter call <server-name>.tools/list
+
+# Call a tool
+mcporter call <server-name>.<tool-name> param1=value1 param2=value2
+```
+
+## API Specifications
+
+- [RolX Chat API Spec](./RolXChatAPI-spec.json) - OpenAPI spec for Controlling API
+
+## License
+
+[MIT Open Source License](https://opensource.org/license/mit)

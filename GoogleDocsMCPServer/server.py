@@ -32,7 +32,7 @@ def get_docs_service():
     """Initialize and return Google Docs API service."""
     creds = None
     token_path = os.path.expanduser('~/.config/gogcli/tokens/bar.ai.bot@cudos.ch.json')
-    
+
     # Try to use existing gog token if available
     if os.path.exists(token_path):
         try:
@@ -41,21 +41,38 @@ def get_docs_service():
             creds = Credentials.from_authorized_user_info(token_data, SCOPES)
         except Exception as e:
             log(f"Warning: Could not load gog token: {e}")
-    
-    # Check for credentials.json for OAuth flow
-    if not creds or not creds.valid:
+
+    # Refresh expired credentials
+    if creds and not creds.valid:
+        if creds.expired and creds.refresh_token:
+            try:
+                log("Refreshing expired token...")
+                creds.refresh(Request())
+                # Save refreshed token
+                with open(token_path, 'w') as f:
+                    f.write(creds.to_json())
+                log("Token refreshed successfully")
+            except Exception as e:
+                log(f"Warning: Could not refresh token: {e}")
+                creds = None
+
+    # If still no valid creds, try OAuth flow
+    if not creds:
         creds_path = os.path.expanduser('~/.config/gogcli/credentials.json')
-        if os.path.exists(creds_path) and not creds:
+        if os.path.exists(creds_path):
+            log("Starting OAuth flow (this will open a browser)...")
             flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
             creds = flow.run_local_server(port=0)
             # Save for future
             os.makedirs(os.path.dirname(token_path), exist_ok=True)
             with open(token_path, 'w') as f:
                 f.write(creds.to_json())
-    
-    if not creds:
-        raise Exception("No valid credentials found. Please run 'gog auth' first.")
-    
+        else:
+            raise Exception("No credentials found. Please run setup_auth.py first.")
+
+    if not creds or not creds.valid:
+        raise Exception("Could not obtain valid credentials.")
+
     return build('docs', 'v1', credentials=creds)
 
 def read_document(doc_id: str, start_line: int = 1, max_lines: int = 100) -> dict:
@@ -493,8 +510,10 @@ def handle_request(request: dict) -> dict:
         }
     
     elif method == 'initialize':
+        # Use the protocol version requested by the client
+        requested_version = params.get('protocolVersion', '2024-11-05')
         return {
-            "protocolVersion": "2024-11-05",
+            "protocolVersion": requested_version,
             "capabilities": {"tools": {}},
             "serverInfo": {"name": "google-docs-mcp", "version": "1.0.0"}
         }
