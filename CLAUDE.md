@@ -15,8 +15,21 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 openclaw_toolbox/
 ├── venv/                           # Shared virtual environment
 ├── GoogleDocsMCPServer/
-│   ├── server.py                   # Main MCP server
+│   ├── server.py                   # Main MCP server (entry point)
 │   ├── setup_auth.py              # OAuth setup script
+│   ├── domain/                     # Business logic layer
+│   │   ├── models.py              # Data classes
+│   │   ├── markdown_parser.py     # Markdown ↔ Google Docs conversion
+│   │   └── text_operations.py     # Text manipulation helpers
+│   ├── infrastructure/             # External systems layer
+│   │   ├── auth_manager.py        # OAuth credentials management
+│   │   └── google_docs_client.py  # Google Docs API wrapper
+│   ├── application/                # Use cases layer
+│   │   ├── unformatted_service.py # Plain text operations
+│   │   └── formatted_service.py   # Markdown operations
+│   ├── mcp/                        # MCP protocol layer
+│   │   ├── protocol.py            # Communication helpers
+│   │   └── tool_definitions.py    # Tool schemas (7 tools)
 │   └── README.md                   # Tool-specific docs
 ├── CudosControllingMCPServer/
 │   ├── server.py                   # Main MCP server (converted from mbtools.py)
@@ -36,22 +49,30 @@ openclaw_toolbox/
 
 ## Architecture
 
-### GoogleDocsMCPServer (GoogleDocsMCPServer/server.py)
+### GoogleDocsMCPServer v2.0 (GoogleDocsMCPServer/server.py)
 - Implements MCP (Model Context Protocol) for Google Docs API integration
 - Uses stdin/stdout for MCP communication (JSON-RPC style)
 - Credentials stored at `~/.config/gogcli/tokens/bar.ai.bot@cudos.ch.json`
 - Service account: `bar.ai.bot@cudos.ch`
 - OAuth scope: `https://www.googleapis.com/auth/documents`
-- Tools exposed:
-  - `docs_read` - Read with pagination (default 100 lines)
-  - `docs_append` - Append text to end
-  - `docs_insert` - Insert at specific index
-  - `docs_replace` - Replace all occurrences
-  - `docs_insert_formatted` - Insert with Markdown-like formatting (# heading, **bold**, *italic*)
-  - `docs_format_as_heading` - Convert existing text to heading (level 1-3)
-  - `docs_format_as_normal` - Convert existing text to normal style
+- **Architecture**: Clean layered architecture (domain, infrastructure, application, MCP)
+- **Tools exposed (7 total)**:
+  - **Unformatted text (3)**: `text_read`, `text_write`, `text_replace`
+  - **Formatted Markdown (4)**: `markdown_read`, `markdown_write`, `markdown_replace`, `markdown_format`
+- **Markdown support**: # headings, **bold**, *italic*, - lists, 1. numbered, ```code```
+- **Round-trip editing**: `markdown_read` converts Google Docs formatting to Markdown for editing
 - Formatting system uses Google Docs API batch updates with paragraph and text style requests
 - Dependencies: `google-api-python-client`, `google-auth-httplib2`, `google-auth-oauthlib`
+
+**File structure:**
+```
+GoogleDocsMCPServer/
+├── server.py                    # Entry point
+├── domain/                      # Business logic (models, markdown_parser, text_operations)
+├── infrastructure/              # External systems (auth_manager, google_docs_client)
+├── application/                 # Use cases (unformatted_service, formatted_service)
+└── mcp/                        # MCP protocol (protocol, tool_definitions)
+```
 
 ### CudosControllingMCPServer (CudosControllingMCPServer/server.py)
 - MCP server for RolX and Bexio queries (converted from CLI to MCP protocol)
@@ -136,7 +157,7 @@ bash setup_venv.sh
 source venv/bin/activate
 ```
 
-### GoogleDocsMCPServer
+### GoogleDocsMCPServer v2.0
 ```bash
 # One-time OAuth setup
 python3 GoogleDocsMCPServer/setup_auth.py
@@ -145,14 +166,21 @@ python3 GoogleDocsMCPServer/setup_auth.py
 # Register with mcporter (use symlink or full path)
 mcporter config add google-docs --command "python3 $(pwd)/google-docs-mcp"
 
-# Read document
-mcporter call google-docs.docs_read documentId=XXX maxLines=50
+# Unformatted text operations
+mcporter call google-docs.text_read documentId=XXX maxLines=50
+mcporter call google-docs.text_write documentId=XXX text="Plain text" position=end
+mcporter call google-docs.text_replace documentId=XXX oldText="..." newText="..."
 
-# Replace text
-mcporter call google-docs.docs_replace documentId=XXX oldText="..." newText="..."
+# Markdown operations
+mcporter call google-docs.markdown_read documentId=XXX  # Read with formatting as Markdown
+mcporter call google-docs.markdown_write documentId=XXX markdown="# Heading\n**bold** and *italic*\n- list" position=end
+mcporter call google-docs.markdown_replace documentId=XXX oldText="Title" newMarkdown="# New Title"
+mcporter call google-docs.markdown_format documentId=XXX text="Section" style=heading1
 
-# Insert formatted text
-mcporter call google-docs.docs_insert_formatted documentId=XXX text="# Heading\n**bold** and *italic*" index=1
+# Round-trip editing example
+content=$(mcporter call google-docs.markdown_read documentId=XXX)
+# Modify $content...
+mcporter call google-docs.markdown_write documentId=XXX markdown="$content" position=end
 ```
 
 ### CudosControllingMCPServer
