@@ -71,7 +71,7 @@ class FormattedDocumentService:
         position: str = 'end',
         index: Optional[int] = None
     ) -> dict:
-        """Write text with Markdown formatting.
+        """Write text with Markdown formatting, including tables.
 
         Args:
             doc_id: Google Doc ID
@@ -96,15 +96,17 @@ class FormattedDocumentService:
             # Parse Markdown
             parse_result = self.parser.parse_markdown_to_formatting(markdown)
 
-            # Build requests: first insert text, then apply formatting
-            requests = [{
-                'insertText': {
-                    'location': {'index': insert_index},
-                    'text': parse_result.plain_text
-                }
-            }]
+            # Phase 1: Insert plain text (non-table content)
+            requests = []
+            if parse_result.plain_text:
+                requests.append({
+                    'insertText': {
+                        'location': {'index': insert_index},
+                        'text': parse_result.plain_text
+                    }
+                })
 
-            # Adjust formatting request indices
+            # Phase 2: Apply text formatting (adjusted indices)
             for req in parse_result.formatting_requests:
                 # Deep copy and adjust indices
                 adjusted_req = self._adjust_request_indices(
@@ -112,8 +114,32 @@ class FormattedDocumentService:
                 )
                 requests.append(adjusted_req)
 
-            # Execute batch update
-            self.client.batch_update(doc_id, requests)
+            # Execute initial batch (text + basic formatting)
+            if requests:
+                self.client.batch_update(doc_id, requests)
+
+            # Phase 3: Insert tables (requires document structure for cell indices)
+            if parse_result.tables:
+                for table_data in parse_result.tables:
+                    table_insert_index = insert_index + table_data.insertion_index - 1
+
+                    # Create table
+                    insert_request, cell_data = self.parser._create_table_requests(
+                        table_data, table_insert_index
+                    )
+
+                    self.client.batch_update(doc_id, [insert_request])
+
+                    # Get updated document structure
+                    doc = self.client.get_document(doc_id)
+
+                    # Populate cells
+                    cell_requests = self.parser._create_cell_update_requests(
+                        cell_data, table_insert_index, doc
+                    )
+
+                    if cell_requests:
+                        self.client.batch_update(doc_id, cell_requests)
 
             return {
                 "success": True,

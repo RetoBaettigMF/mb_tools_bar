@@ -86,7 +86,7 @@ def get_all_tools() -> List[Dict]:
         },
         {
             "name": "markdown_read",
-            "description": "Read document with formatting converted to Markdown (# headings, **bold**, *italic*, - lists, 1. numbered lists)",
+            "description": "Read document with formatting converted to Markdown (# headings, **bold**, *italic*, - lists, 1. numbered lists, | tables |). Tables preserve inline formatting.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -110,7 +110,7 @@ def get_all_tools() -> List[Dict]:
         },
         {
             "name": "markdown_write",
-            "description": "Write text with Markdown formatting (# H1, ## H2, ### H3, **bold**, *italic*, - lists, 1. numbered, ```code```)",
+            "description": "Write text with Markdown formatting (# H1, ## H2, ### H3, **bold**, *italic*, - lists, 1. numbered, ```code```, | tables |). Tables support column alignment via separator row syntax (:---, :---:, ---:).",
             "inputSchema": {
                 "type": "object",
                 "properties": {

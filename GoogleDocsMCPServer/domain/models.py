@@ -1,6 +1,6 @@
 """Domain models for Google Docs operations."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Optional, List
 
 
@@ -17,10 +17,23 @@ class DocumentContent:
 
 
 @dataclass
+class TableData:
+    """Represents a parsed markdown table."""
+    headers: List[str]
+    alignments: List[str]  # 'left', 'center', 'right'
+    rows: List[List[str]]  # Data rows (excluding header)
+    num_rows: int  # Total including header
+    num_cols: int
+    start_line: int  # For error reporting
+    insertion_index: int = 0  # Set during parsing
+
+
+@dataclass
 class MarkdownParseResult:
     """Result of parsing Markdown into Google Docs formatting."""
     plain_text: str
     formatting_requests: List[dict]  # Google Docs batch requests
+    tables: List[TableData] = field(default_factory=list)
 
 
 @dataclass

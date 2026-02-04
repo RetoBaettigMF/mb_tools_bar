@@ -66,7 +66,7 @@ class GoogleDocsClient:
         return text
 
     def extract_formatted_structure(self, doc: dict) -> List[Dict[str, Any]]:
-        """Extract text with formatting metadata.
+        """Extract text with formatting metadata, including tables.
 
         Args:
             doc: Document structure from API
@@ -79,6 +79,11 @@ class GoogleDocsClient:
                 'bold': bool,
                 'italic': bool,
                 'list_type': Optional[str] (BULLET, DECIMAL, etc.)
+            }
+            OR for tables:
+            {
+                'type': 'table',
+                'rows': [[[{'text': '...', 'bold': bool, 'italic': bool}, ...], ...], ...]
             }
         """
         content = doc.get('body', {}).get('content', [])
@@ -122,7 +127,74 @@ class GoogleDocsClient:
                             'list_type': list_type
                         })
 
+            elif 'table' in element:
+                # Extract table structure
+                table_segment = self._extract_table_structure(element['table'])
+                formatted_segments.append(table_segment)
+
         return formatted_segments
+
+    def _extract_table_structure(self, table: dict) -> Dict[str, Any]:
+        """Extract table as structured data with formatting.
+
+        Returns:
+            {
+                'type': 'table',
+                'rows': [
+                    [  # Row 0 (header)
+                        [{'text': '...', 'bold': bool, 'italic': bool}, ...],  # Cell 0
+                        [{'text': '...', 'bold': bool, 'italic': bool}, ...],  # Cell 1
+                    ],
+                    [  # Row 1
+                        [{'text': '...', 'bold': bool, 'italic': bool}, ...],
+                    ],
+                ]
+            }
+        """
+        rows_data = []
+
+        for table_row in table.get('tableRows', []):
+            row_cells = []
+
+            for table_cell in table_row.get('tableCells', []):
+                # Extract cell content with formatting
+                cell_content = table_cell.get('content', [])
+                cell_segments = self._extract_cell_formatted_text(cell_content)
+                row_cells.append(cell_segments)
+
+            rows_data.append(row_cells)
+
+        return {
+            'type': 'table',
+            'rows': rows_data
+        }
+
+    def _extract_cell_formatted_text(
+        self, cell_content: List[dict]
+    ) -> List[Dict[str, Any]]:
+        """Extract formatted text segments from a table cell.
+
+        Returns:
+            List of {'text': str, 'bold': bool, 'italic': bool}
+        """
+        segments = []
+
+        for element in cell_content:
+            if 'paragraph' in element:
+                for elem in element['paragraph'].get('elements', []):
+                    if 'textRun' in elem:
+                        text_run = elem['textRun']
+                        text = text_run.get('content', '').rstrip('\n')  # Strip paragraph newline
+
+                        if text:  # Only include non-empty segments
+                            text_style = text_run.get('textStyle', {})
+                            segments.append({
+                                'text': text,
+                                'bold': text_style.get('bold', False),
+                                'italic': text_style.get('italic', False)
+                            })
+
+        return segments
 
     def batch_update(self, doc_id: str, requests: List[dict]) -> dict:
         """Execute batch update requests.
