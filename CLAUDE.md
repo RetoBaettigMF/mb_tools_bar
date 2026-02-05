@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **openclaw_toolbox** (formerly mb_tools_bar) is a collection of MCP servers and CLI tools for Cudos/moltbot internal systems:
 - **GoogleDocsMCPServer**: MCP server for editing Google Docs
 - **CudosControllingMCPServer**: MCP server for querying RolX (timesheet) and Bexio (invoicing) via natural language
+- **CRMMCPServer**: MCP server for automating web-based CRM interactions
 - **SalesReminderTool**: Automated email reminder for sales potential updates
 
 ## Repository Structure
@@ -34,11 +35,31 @@ openclaw_toolbox/
 ├── CudosControllingMCPServer/
 │   ├── server.py                   # Main MCP server (converted from mbtools.py)
 │   └── README.md                   # Tool-specific docs
+├── CRMMCPServer/
+│   ├── server.py                   # Main MCP server (entry point)
+│   ├── setup_auth.py              # Credential setup script
+│   ├── domain/                     # Business logic layer
+│   │   ├── models.py              # Data classes
+│   │   ├── page_objects.py        # Page Object Model
+│   │   └── fuzzy_search.py        # Search retry logic
+│   ├── infrastructure/             # External systems layer
+│   │   ├── auth_manager.py        # Credential management
+│   │   └── browser_client.py      # Playwright wrapper
+│   ├── application/                # Use cases layer
+│   │   ├── search_service.py      # Search operations
+│   │   ├── create_service.py      # Create with duplicate checking
+│   │   ├── update_service.py      # Update operations
+│   │   └── comment_service.py     # Comment operations
+│   ├── mcp/                        # MCP protocol layer
+│   │   ├── protocol.py            # Communication helpers
+│   │   └── tool_definitions.py    # Tool schemas (11 tools)
+│   └── README.md                   # Tool-specific docs
 ├── SalesReminderTool/
 │   ├── sales_reminder.py          # CLI tool
 │   └── README.md                   # Tool-specific docs
 ├── google-docs-mcp                 # Symlink → GoogleDocsMCPServer/server.py
 ├── cudos-controlling-mcp           # Symlink → CudosControllingMCPServer/server.py
+├── crm-mcp                         # Symlink → CRMMCPServer/server.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
 ├── requirements.txt               # All dependencies
 ├── setup_venv.sh                  # Virtual environment setup
@@ -90,6 +111,36 @@ GoogleDocsMCPServer/
   - `/bexio/query` - Bexio invoice data
 - Returns JSON responses with `ensure_ascii=False` for proper UTF-8 handling (German umlauts)
 - Dependencies: Python stdlib only (urllib, json)
+
+### CRMMCPServer (CRMMCPServer/server.py)
+- MCP server for web-based CRM automation at https://mf250.co.crm-now.de/
+- Uses stdin/stdout for MCP communication (JSON-RPC style)
+- Browser automation via Playwright (headless Chromium)
+- Authentication via:
+  - `.env` file in repository root (CRM_USERNAME, CRM_PASSWORD)
+  - Environment variables (CRM_USERNAME, CRM_PASSWORD)
+  - Config file `~/.config/crm-mcp/credentials.json`
+- Persistent browser session saved to `./.auth/state.json`
+- **Architecture**: Clean layered architecture (domain, infrastructure, application, MCP)
+- **Tools exposed (11 total)**:
+  - **Search & Read (4)**: `search_account`, `search_person`, `search_potential`, `get_comments`
+  - **Create with duplicate checking (3)**: `create_account`, `create_person`, `create_potential`
+  - **Update (3)**: `update_account`, `update_person`, `update_potential`
+  - **Interaction (1)**: `add_comment_to_account`
+- **Fuzzy search**: 5 retry strategies (remove special chars, shorten, replace umlauts)
+- **Page Object Model**: AccountPage, ContactPage, PotentialPage, CommentManager
+- Timeouts: 30s default, 60s navigation
+- Dependencies: `playwright>=1.41.0`, `python-dotenv>=1.0.0`
+
+**File structure:**
+```
+CRMMCPServer/
+├── server.py                    # Entry point
+├── domain/                      # Business logic (models, page_objects, fuzzy_search)
+├── infrastructure/              # External systems (auth_manager, browser_client)
+├── application/                 # Use cases (search, create, update, comment services)
+└── mcp/                        # MCP protocol (protocol, tool_definitions)
+```
 
 ### SalesReminderTool (SalesReminderTool/sales_reminder.py)
 - CLI tool for automated sales potential reminders
@@ -204,6 +255,44 @@ mcporter call cudos-controlling.controlling_query_rolx query="How many hours did
 mcporter call cudos-controlling.controlling_query_bexio query="Give me invoice #0290.001.01.01"
 ```
 
+### CRMMCPServer
+```bash
+# Install Playwright browsers (one-time)
+pip install -r requirements.txt
+playwright install chromium
+
+# Setup credentials (option 1: interactive - recommended)
+python3 CRMMCPServer/setup_auth.py
+# Login with your CRM credentials when prompted
+
+# Or option 2: .env file
+echo 'CRM_USERNAME=your-username' >> .env
+echo 'CRM_PASSWORD=your-password' >> .env
+
+# Or option 3: export environment variables
+export CRM_USERNAME="your-username"
+export CRM_PASSWORD="your-password"
+
+# Register with mcporter
+mcporter config add crm --command "python3 $(pwd)/crm-mcp"
+
+# Search operations
+mcporter call crm.search_account name="Cudos" ort="Zürich"
+mcporter call crm.search_person nachname="Bättig" vorname="Reto"
+mcporter call crm.search_potential status="gewonnen"
+
+# Create operations (with duplicate checking)
+mcporter call crm.create_account data='{"accountname": "Test Company", "bill_city": "Zürich"}'
+mcporter call crm.create_person firma_id="12345" data='{"firstname": "Jane", "lastname": "Doe"}'
+
+# Update operations
+mcporter call crm.update_account account_id="12345" updates='{"phone": "+41 44 123 45 67"}'
+
+# Comment operations
+mcporter call crm.get_comments account_id="12345" limit=5
+mcporter call crm.add_comment_to_account account_id="12345" autor="Reto" text="Follow-up needed"
+```
+
 ### SalesReminderTool
 ```bash
 # Manual test
@@ -229,6 +318,9 @@ Consolidated in `requirements.txt`:
 **CudosControllingMCPServer:**
 - Python stdlib only (urllib, json)
 
+**CRMMCPServer:**
+- `playwright>=1.41.0`
+
 **SalesReminderTool:**
 - Python stdlib only (calendar, datetime)
 
@@ -243,11 +335,14 @@ All tools are in subdirectories:
 - `GoogleDocsMCPServer/server.py` - Google Docs MCP server
 - `GoogleDocsMCPServer/setup_auth.py` - OAuth setup
 - `CudosControllingMCPServer/server.py` - Controlling MCP server
+- `CRMMCPServer/server.py` - CRM MCP server
+- `CRMMCPServer/setup_auth.py` - CRM credential setup
 - `SalesReminderTool/sales_reminder.py` - Sales reminder CLI
 
 Symlinks in root for convenience:
 - `google-docs-mcp` → `GoogleDocsMCPServer/server.py`
 - `cudos-controlling-mcp` → `CudosControllingMCPServer/server.py`
+- `crm-mcp` → `CRMMCPServer/server.py`
 - `sales-reminder` → `SalesReminderTool/sales_reminder.py`
 
 ## Testing
@@ -263,6 +358,13 @@ No formal test suite exists. Manual testing approach:
 - Test against live API with known queries
 - Verify error handling (missing API key, invalid query, etc.)
 - Check UTF-8 handling with German umlauts
+
+**CRMMCPServer:**
+- Use `mcporter call` to test search, create, update, comment operations
+- Test fuzzy search with partial names and umlauts
+- Verify duplicate checking prevents duplicate accounts/contacts
+- Test session persistence across multiple calls
+- Verify selectors work with actual CRM HTML structure
 
 **SalesReminderTool:**
 - Test with specific dates by temporarily modifying the date check

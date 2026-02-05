@@ -86,6 +86,48 @@ mcporter call cudos-controlling.controlling_query_bexio \
 
 ---
 
+#### [CRMMCPServer](./CRMMCPServer/README.md)
+
+Automate interactions with the web-based CRM system.
+
+**Tools (11 total):**
+- Search: `search_account`, `search_person`, `search_potential`, `get_comments`
+- Create: `create_account`, `create_person`, `create_potential` (with duplicate checking)
+- Update: `update_account`, `update_person`, `update_potential`
+- Interact: `add_comment_to_account`
+
+**Features:**
+- Fuzzy search with 5 retry strategies
+- Persistent browser session
+- Duplicate checking for accounts and contacts
+
+**Setup:**
+```bash
+# Install Playwright
+pip install -r requirements.txt
+playwright install chromium
+
+# Configure credentials
+python3 CRMMCPServer/setup_auth.py
+
+# Register with mcporter
+mcporter config add crm --command "python3 $(pwd)/crm-mcp"
+```
+
+**Usage:**
+```bash
+# Search for company
+mcporter call crm.search_account name="Cudos" ort="Zürich"
+
+# Create company
+mcporter call crm.create_account data='{"accountname": "New Company", "bill_city": "Zürich"}'
+
+# Update company
+mcporter call crm.update_account account_id="12345" updates='{"phone": "+41 44 123 45 67"}'
+```
+
+---
+
 ### 🛠️ CLI Tools
 
 #### [SalesReminderTool](./SalesReminderTool/README.md)
@@ -116,11 +158,16 @@ openclaw_toolbox/
 ├── CudosControllingMCPServer/
 │   ├── server.py                   # MCP server
 │   └── README.md
+├── CRMMCPServer/
+│   ├── server.py                   # MCP server
+│   ├── setup_auth.py               # Credential setup
+│   └── README.md
 ├── SalesReminderTool/
 │   ├── sales_reminder.py           # CLI tool
 │   └── README.md
 ├── google-docs-mcp                 # Symlink → GoogleDocsMCPServer/server.py
 ├── cudos-controlling-mcp           # Symlink → CudosControllingMCPServer/server.py
+├── crm-mcp                         # Symlink → CRMMCPServer/server.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
 ├── requirements.txt                # All dependencies
 ├── setup_venv.sh                   # Virtual environment setup
