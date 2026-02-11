@@ -2,16 +2,8 @@
 requests>=2.31.0
 python-dotenv>=1.0.0
 
-# Google Docs MCP Server
-google-api-python-client>=2.0.0
-google-auth-httplib2>=0.1.0
-google-auth-oauthlib>=0.5.0
-
 # Cudos Controlling MCP Server
 # (uses only Python stdlib - no external dependencies)
 
 # Sales Reminder Tool
 # (uses only Python stdlib - no external dependencies)
-
-# CRM MCP Server
-playwright>=1.41.0

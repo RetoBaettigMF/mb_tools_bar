@@ -5,9 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Overview
 
 **openclaw_toolbox** (formerly mb_tools_bar) is a collection of MCP servers and CLI tools for Cudos/moltbot internal systems:
-- **GoogleDocsMCPServer**: MCP server for editing Google Docs
 - **CudosControllingMCPServer**: MCP server for querying RolX (timesheet) and Bexio (invoicing) via natural language
-- **CRMMCPServer**: MCP server for automating web-based CRM interactions
 - **SalesReminderTool**: Automated email reminder for sales potential updates
 
 ## Repository Structure
@@ -15,51 +13,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 openclaw_toolbox/
 ├── venv/                           # Shared virtual environment
-├── GoogleDocsMCPServer/
-│   ├── server.py                   # Main MCP server (entry point)
-│   ├── setup_auth.py              # OAuth setup script
-│   ├── domain/                     # Business logic layer
-│   │   ├── models.py              # Data classes
-│   │   ├── markdown_parser.py     # Markdown ↔ Google Docs conversion
-│   │   └── text_operations.py     # Text manipulation helpers
-│   ├── infrastructure/             # External systems layer
-│   │   ├── auth_manager.py        # OAuth credentials management
-│   │   └── google_docs_client.py  # Google Docs API wrapper
-│   ├── application/                # Use cases layer
-│   │   ├── unformatted_service.py # Plain text operations
-│   │   └── formatted_service.py   # Markdown operations
-│   ├── mcp/                        # MCP protocol layer
-│   │   ├── protocol.py            # Communication helpers
-│   │   └── tool_definitions.py    # Tool schemas (7 tools)
-│   └── README.md                   # Tool-specific docs
 ├── CudosControllingMCPServer/
 │   ├── server.py                   # Main MCP server (converted from mbtools.py)
-│   └── README.md                   # Tool-specific docs
-├── CRMMCPServer/
-│   ├── server.py                   # Main MCP server (entry point)
-│   ├── setup_auth.py              # Credential setup script
-│   ├── domain/                     # Business logic layer
-│   │   ├── models.py              # Data classes
-│   │   ├── page_objects.py        # Page Object Model
-│   │   └── fuzzy_search.py        # Search retry logic
-│   ├── infrastructure/             # External systems layer
-│   │   ├── auth_manager.py        # Credential management
-│   │   └── browser_client.py      # Playwright wrapper
-│   ├── application/                # Use cases layer
-│   │   ├── search_service.py      # Search operations
-│   │   ├── create_service.py      # Create with duplicate checking
-│   │   ├── update_service.py      # Update operations
-│   │   └── comment_service.py     # Comment operations
-│   ├── mcp/                        # MCP protocol layer
-│   │   ├── protocol.py            # Communication helpers
-│   │   └── tool_definitions.py    # Tool schemas (11 tools)
 │   └── README.md                   # Tool-specific docs
 ├── SalesReminderTool/
 │   ├── sales_reminder.py          # CLI tool
 │   └── README.md                   # Tool-specific docs
-├── google-docs-mcp                 # Symlink → GoogleDocsMCPServer/server.py
 ├── cudos-controlling-mcp           # Symlink → CudosControllingMCPServer/server.py
-├── crm-mcp                         # Symlink → CRMMCPServer/server.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
 ├── requirements.txt               # All dependencies
 ├── setup_venv.sh                  # Virtual environment setup
@@ -69,31 +29,6 @@ openclaw_toolbox/
 ```
 
 ## Architecture
-
-### GoogleDocsMCPServer v2.0 (GoogleDocsMCPServer/server.py)
-- Implements MCP (Model Context Protocol) for Google Docs API integration
-- Uses stdin/stdout for MCP communication (JSON-RPC style)
-- Credentials stored at `~/.config/gogcli/tokens/bar.ai.bot@cudos.ch.json`
-- Service account: `bar.ai.bot@cudos.ch`
-- OAuth scope: `https://www.googleapis.com/auth/documents`
-- **Architecture**: Clean layered architecture (domain, infrastructure, application, MCP)
-- **Tools exposed (7 total)**:
-  - **Unformatted text (3)**: `text_read`, `text_write`, `text_replace`
-  - **Formatted Markdown (4)**: `markdown_read`, `markdown_write`, `markdown_replace`, `markdown_format`
-- **Markdown support**: # headings, **bold**, *italic*, - lists, 1. numbered, ```code```
-- **Round-trip editing**: `markdown_read` converts Google Docs formatting to Markdown for editing
-- Formatting system uses Google Docs API batch updates with paragraph and text style requests
-- Dependencies: `google-api-python-client`, `google-auth-httplib2`, `google-auth-oauthlib`
-
-**File structure:**
-```
-GoogleDocsMCPServer/
-├── server.py                    # Entry point
-├── domain/                      # Business logic (models, markdown_parser, text_operations)
-├── infrastructure/              # External systems (auth_manager, google_docs_client)
-├── application/                 # Use cases (unformatted_service, formatted_service)
-└── mcp/                        # MCP protocol (protocol, tool_definitions)
-```
 
 ### CudosControllingMCPServer (CudosControllingMCPServer/server.py)
 - MCP server for RolX and Bexio queries (converted from CLI to MCP protocol)
@@ -111,36 +46,6 @@ GoogleDocsMCPServer/
   - `/bexio/query` - Bexio invoice data
 - Returns JSON responses with `ensure_ascii=False` for proper UTF-8 handling (German umlauts)
 - Dependencies: Python stdlib only (urllib, json)
-
-### CRMMCPServer (CRMMCPServer/server.py)
-- MCP server for web-based CRM automation at https://mf250.co.crm-now.de/
-- Uses stdin/stdout for MCP communication (JSON-RPC style)
-- Browser automation via Playwright (headless Chromium)
-- Authentication via:
-  - `.env` file in repository root (CRM_USERNAME, CRM_PASSWORD)
-  - Environment variables (CRM_USERNAME, CRM_PASSWORD)
-  - Config file `~/.config/crm-mcp/credentials.json`
-- Persistent browser session saved to `./.auth/state.json`
-- **Architecture**: Clean layered architecture (domain, infrastructure, application, MCP)
-- **Tools exposed (11 total)**:
-  - **Search & Read (4)**: `search_account`, `search_person`, `search_potential`, `get_comments`
-  - **Create with duplicate checking (3)**: `create_account`, `create_person`, `create_potential`
-  - **Update (3)**: `update_account`, `update_person`, `update_potential`
-  - **Interaction (1)**: `add_comment_to_account`
-- **Fuzzy search**: 5 retry strategies (remove special chars, shorten, replace umlauts)
-- **Page Object Model**: AccountPage, ContactPage, PotentialPage, CommentManager
-- Timeouts: 30s default, 60s navigation
-- Dependencies: `playwright>=1.41.0`, `python-dotenv>=1.0.0`
-
-**File structure:**
-```
-CRMMCPServer/
-├── server.py                    # Entry point
-├── domain/                      # Business logic (models, page_objects, fuzzy_search)
-├── infrastructure/              # External systems (auth_manager, browser_client)
-├── application/                 # Use cases (search, create, update, comment services)
-└── mcp/                        # MCP protocol (protocol, tool_definitions)
-```
 
 ### SalesReminderTool (SalesReminderTool/sales_reminder.py)
 - CLI tool for automated sales potential reminders
@@ -208,32 +113,6 @@ bash setup_venv.sh
 source venv/bin/activate
 ```
 
-### GoogleDocsMCPServer v2.0
-```bash
-# One-time OAuth setup
-python3 GoogleDocsMCPServer/setup_auth.py
-# Login with bar.ai.bot@cudos.ch when browser opens
-
-# Register with mcporter (use symlink or full path)
-mcporter config add google-docs --command "python3 $(pwd)/google-docs-mcp"
-
-# Unformatted text operations
-mcporter call google-docs.text_read documentId=XXX maxLines=50
-mcporter call google-docs.text_write documentId=XXX text="Plain text" position=end
-mcporter call google-docs.text_replace documentId=XXX oldText="..." newText="..."
-
-# Markdown operations
-mcporter call google-docs.markdown_read documentId=XXX  # Read with formatting as Markdown
-mcporter call google-docs.markdown_write documentId=XXX markdown="# Heading\n**bold** and *italic*\n- list" position=end
-mcporter call google-docs.markdown_replace documentId=XXX oldText="Title" newMarkdown="# New Title"
-mcporter call google-docs.markdown_format documentId=XXX text="Section" style=heading1
-
-# Round-trip editing example
-content=$(mcporter call google-docs.markdown_read documentId=XXX)
-# Modify $content...
-mcporter call google-docs.markdown_write documentId=XXX markdown="$content" position=end
-```
-
 ### CudosControllingMCPServer
 ```bash
 # Setup API key (option 1: .env file - recommended)
@@ -255,44 +134,6 @@ mcporter call cudos-controlling.controlling_query_rolx query="How many hours did
 mcporter call cudos-controlling.controlling_query_bexio query="Give me invoice #0290.001.01.01"
 ```
 
-### CRMMCPServer
-```bash
-# Install Playwright browsers (one-time)
-pip install -r requirements.txt
-playwright install chromium
-
-# Setup credentials (option 1: interactive - recommended)
-python3 CRMMCPServer/setup_auth.py
-# Login with your CRM credentials when prompted
-
-# Or option 2: .env file
-echo 'CRM_USERNAME=your-username' >> .env
-echo 'CRM_PASSWORD=your-password' >> .env
-
-# Or option 3: export environment variables
-export CRM_USERNAME="your-username"
-export CRM_PASSWORD="your-password"
-
-# Register with mcporter
-mcporter config add crm --command "python3 $(pwd)/crm-mcp"
-
-# Search operations
-mcporter call crm.search_account name="Cudos" ort="Zürich"
-mcporter call crm.search_person nachname="Bättig" vorname="Reto"
-mcporter call crm.search_potential status="gewonnen"
-
-# Create operations (with duplicate checking)
-mcporter call crm.create_account data='{"accountname": "Test Company", "bill_city": "Zürich"}'
-mcporter call crm.create_person firma_id="12345" data='{"firstname": "Jane", "lastname": "Doe"}'
-
-# Update operations
-mcporter call crm.update_account account_id="12345" updates='{"phone": "+41 44 123 45 67"}'
-
-# Comment operations
-mcporter call crm.get_comments account_id="12345" limit=5
-mcporter call crm.add_comment_to_account account_id="12345" autor="Reto" text="Follow-up needed"
-```
-
 ### SalesReminderTool
 ```bash
 # Manual test
@@ -310,16 +151,8 @@ Consolidated in `requirements.txt`:
 - `requests>=2.31.0`
 - `python-dotenv>=1.0.0` (for .env file support)
 
-**GoogleDocsMCPServer:**
-- `google-api-python-client>=2.0.0`
-- `google-auth-httplib2>=0.1.0`
-- `google-auth-oauthlib>=0.5.0`
-
 **CudosControllingMCPServer:**
 - Python stdlib only (urllib, json)
-
-**CRMMCPServer:**
-- `playwright>=1.41.0`
 
 **SalesReminderTool:**
 - Python stdlib only (calendar, datetime)
@@ -332,39 +165,21 @@ pip install -r requirements.txt
 ## File Paths (Important for Tools)
 
 All tools are in subdirectories:
-- `GoogleDocsMCPServer/server.py` - Google Docs MCP server
-- `GoogleDocsMCPServer/setup_auth.py` - OAuth setup
 - `CudosControllingMCPServer/server.py` - Controlling MCP server
-- `CRMMCPServer/server.py` - CRM MCP server
-- `CRMMCPServer/setup_auth.py` - CRM credential setup
 - `SalesReminderTool/sales_reminder.py` - Sales reminder CLI
 
 Symlinks in root for convenience:
-- `google-docs-mcp` → `GoogleDocsMCPServer/server.py`
 - `cudos-controlling-mcp` → `CudosControllingMCPServer/server.py`
-- `crm-mcp` → `CRMMCPServer/server.py`
 - `sales-reminder` → `SalesReminderTool/sales_reminder.py`
 
 ## Testing
 
 No formal test suite exists. Manual testing approach:
 
-**GoogleDocsMCPServer:**
-- Use `mcporter call` to verify operations on test documents
-- Test formatting with sample Markdown text
-- Verify OAuth token refresh
-
 **CudosControllingMCPServer:**
 - Test against live API with known queries
 - Verify error handling (missing API key, invalid query, etc.)
 - Check UTF-8 handling with German umlauts
-
-**CRMMCPServer:**
-- Use `mcporter call` to test search, create, update, comment operations
-- Test fuzzy search with partial names and umlauts
-- Verify duplicate checking prevents duplicate accounts/contacts
-- Test session persistence across multiple calls
-- Verify selectors work with actual CRM HTML structure
 
 **SalesReminderTool:**
 - Test with specific dates by temporarily modifying the date check
@@ -389,10 +204,6 @@ No formal test suite exists. Manual testing approach:
 - Always use `ensure_ascii=False` for proper UTF-8 handling (German umlauts, special characters)
 - Use `indent=2` for readable output
 
-**OAuth tokens**:
-- Shared with `gog` CLI tool via `~/.config/gogcli/tokens/`
-- Service account: `bar.ai.bot@cudos.ch`
-
 ## Adding New Tools
 
 1. Create directory: `NewToolMCPServer/` or `NewToolCLI/`
@@ -413,7 +224,9 @@ For MCP servers, follow the established pattern:
 
 The following files were removed during restructuring:
 - `mbtools.py` - Converted to `CudosControllingMCPServer/server.py`
-- `mcp_server_google_docs.py` - Moved to `GoogleDocsMCPServer/server.py`
-- `setup_docs_auth.py` - Moved to `GoogleDocsMCPServer/setup_auth.py`
+- `mcp_server_google_docs.py` - Removed (Google Docs MCP Server)
+- `setup_docs_auth.py` - Removed (Google Docs MCP Server)
+- `GoogleDocsMCPServer/` - Removed completely
+- `CRMMCPServer/` - Removed completely
 - `crm_browser.py` - Deprecated Selenium-based CRM tool
 - `simple_crm_search.py` - Deprecated Selenium-based CRM tool

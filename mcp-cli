@@ -5,7 +5,6 @@ import json
 import sys
 
 SERVERS = {
-    "google-docs": "/home/reto/Development/mb_tools_bar/GoogleDocsMCPServer/server.py",
     "cudos-controlling": "/home/reto/Development/mb_tools_bar/CudosControllingMCPServer/server.py"
 }
 
@@ -116,7 +115,6 @@ def main():
         print("")
         print("Examples:")
         print('  mcp-cli cudos-controlling.controlling_query_rolx query="Show me time entries"')
-        print('  mcp-cli google-docs.docs_read documentId=XXX maxLines=50')
         sys.exit(1)
 
     command = sys.argv[1]

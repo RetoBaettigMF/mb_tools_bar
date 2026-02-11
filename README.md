@@ -28,35 +28,6 @@ Each tool has its own setup requirements. See individual tool READMEs for detail
 
 ### 🔧 MCP Servers
 
-#### [GoogleDocsMCPServer](./GoogleDocsMCPServer/README.md)
-
-Edit Google Docs via MCP protocol.
-
-**Tools:**
-- `docs_read` - Read with pagination
-- `docs_append` - Append text
-- `docs_insert` - Insert at position
-- `docs_replace` - Replace text
-- `docs_insert_formatted` - Insert with Markdown-like formatting
-- `docs_format_as_heading` - Convert text to heading
-- `docs_format_as_normal` - Convert text to normal style
-
-**Setup:**
-```bash
-# One-time OAuth
-python3 GoogleDocsMCPServer/setup_auth.py
-
-# Register with mcporter
-mcporter config add google-docs --command "python3 $(pwd)/google-docs-mcp"
-```
-
-**Usage:**
-```bash
-mcporter call google-docs.docs_read documentId=<doc-id> maxLines=50
-```
-
----
-
 #### [CudosControllingMCPServer](./CudosControllingMCPServer/README.md)
 
 Query RolX (timesheet) and Bexio (invoicing) via natural language.
@@ -86,48 +57,6 @@ mcporter call cudos-controlling.controlling_query_bexio \
 
 ---
 
-#### [CRMMCPServer](./CRMMCPServer/README.md)
-
-Automate interactions with the web-based CRM system.
-
-**Tools (11 total):**
-- Search: `search_account`, `search_person`, `search_potential`, `get_comments`
-- Create: `create_account`, `create_person`, `create_potential` (with duplicate checking)
-- Update: `update_account`, `update_person`, `update_potential`
-- Interact: `add_comment_to_account`
-
-**Features:**
-- Fuzzy search with 5 retry strategies
-- Persistent browser session
-- Duplicate checking for accounts and contacts
-
-**Setup:**
-```bash
-# Install Playwright
-pip install -r requirements.txt
-playwright install chromium
-
-# Configure credentials
-python3 CRMMCPServer/setup_auth.py
-
-# Register with mcporter
-mcporter config add crm --command "python3 $(pwd)/crm-mcp"
-```
-
-**Usage:**
-```bash
-# Search for company
-mcporter call crm.search_account name="Cudos" ort="Zürich"
-
-# Create company
-mcporter call crm.create_account data='{"accountname": "New Company", "bill_city": "Zürich"}'
-
-# Update company
-mcporter call crm.update_account account_id="12345" updates='{"phone": "+41 44 123 45 67"}'
-```
-
----
-
 ### 🛠️ CLI Tools
 
 #### [SalesReminderTool](./SalesReminderTool/README.md)
@@ -151,23 +80,13 @@ python3 sales-reminder recipient@example.com
 ```
 openclaw_toolbox/
 ├── venv/                           # Shared virtual environment
-├── GoogleDocsMCPServer/
-│   ├── server.py                   # MCP server
-│   ├── setup_auth.py               # OAuth setup
-│   └── README.md
 ├── CudosControllingMCPServer/
 │   ├── server.py                   # MCP server
-│   └── README.md
-├── CRMMCPServer/
-│   ├── server.py                   # MCP server
-│   ├── setup_auth.py               # Credential setup
 │   └── README.md
 ├── SalesReminderTool/
 │   ├── sales_reminder.py           # CLI tool
 │   └── README.md
-├── google-docs-mcp                 # Symlink → GoogleDocsMCPServer/server.py
 ├── cudos-controlling-mcp           # Symlink → CudosControllingMCPServer/server.py
-├── crm-mcp                         # Symlink → CRMMCPServer/server.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
 ├── requirements.txt                # All dependencies
 ├── setup_venv.sh                   # Virtual environment setup
@@ -191,11 +110,7 @@ All MCP servers follow the same architecture:
 
 ### Core (shared)
 - `requests>=2.31.0`
-
-### Google Docs MCP Server
-- `google-api-python-client>=2.0.0`
-- `google-auth-httplib2>=0.1.0`
-- `google-auth-oauthlib>=0.5.0`
+- `python-dotenv>=1.0.0`
 
 ### Cudos Controlling MCP Server
 - Python stdlib only (urllib, json)

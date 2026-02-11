@@ -186,8 +186,8 @@ def main():
             log(f"Received line ({len(line)} chars): {line[:100] if line else 'empty'}")
 
             if not line:
-                log("Empty line, continuing...")
-                continue
+                log("EOF received, shutting down")
+                break
 
             line = line.strip()
             if not line:
