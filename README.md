@@ -1,6 +1,6 @@
 # OpenClaw.ai Toolbox
 
-Collection of MCP servers and CLI tools for Cudos internal systems, designed for use with OpenClaw.ai.
+Collection of CLI Tools for Cudos internal systems, designed for use with OpenClaw.ai.
 
 ## Quick Start
 
@@ -26,38 +26,35 @@ Each tool has its own setup requirements. See individual tool READMEs for detail
 
 ## Tools Overview
 
-### 🔧 MCP Servers
+### 🛠️ CLI Tools
 
-#### [CudosControllingMCPServer](./CudosControllingMCPServer/README.md)
+#### [Cudos Controlling CLI](./CudosControllingTool/README.md)
 
-Query RolX (timesheet) and Bexio (invoicing) via natural language.
+Query RolX (timesheet) and Bexio (invoicing) via natural language from the command line.
 
-**Tools:**
-- `controlling_query_rolx` - Query timesheet data
-- `controlling_query_bexio` - Query invoice data
+**Features:**
+- `rolx` subcommand - Query timesheet data
+- `bexio` subcommand - Query invoice data
+- Natural language queries in English or German
+- JSON mode for scripting
 
 **Setup:**
 ```bash
 # Set API key (either in .env file or export)
 echo 'MBTOOLS_API_KEY=your-key' >> .env
 # Or: export MBTOOLS_API_KEY="your-key"
-
-# Register with mcporter
-mcporter config add cudos-controlling --command "python3 $(pwd)/cudos-controlling-mcp"
 ```
 
 **Usage:**
 ```bash
-mcporter call cudos-controlling.controlling_query_rolx \
-    query="How many hours did Reto Bättig work in 2025 per task"
+# RolX timesheet queries
+./cudos-controlling rolx "How many hours did Reto Bättig work in 2025 per task"
+./cudos-controlling rolx "Wie viele Stunden hat Reto gearbeitet?" --json
 
-mcporter call cudos-controlling.controlling_query_bexio \
-    query="Give me invoice #0290.001.01.01"
+# Bexio invoicing queries
+./cudos-controlling bexio "Give me invoice #0290.001.01.01"
+./cudos-controlling bexio "Show all invoices for project 290" --json
 ```
-
----
-
-### 🛠️ CLI Tools
 
 #### [SalesReminderTool](./SalesReminderTool/README.md)
 
@@ -80,13 +77,13 @@ python3 sales-reminder recipient@example.com
 ```
 openclaw_toolbox/
 ├── venv/                           # Shared virtual environment
-├── CudosControllingMCPServer/
-│   ├── server.py                   # MCP server
+├── CudosControllingTool/
+│   ├── cudos_controlling.py        # CLI tool
 │   └── README.md
 ├── SalesReminderTool/
 │   ├── sales_reminder.py           # CLI tool
 │   └── README.md
-├── cudos-controlling-mcp           # Symlink → CudosControllingMCPServer/server.py
+├── cudos-controlling               # Symlink → CudosControllingTool/cudos_controlling.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
 ├── requirements.txt                # All dependencies
 ├── setup_venv.sh                   # Virtual environment setup
@@ -94,17 +91,15 @@ openclaw_toolbox/
 └── CLAUDE.md                       # Development guidelines
 ```
 
-## MCP Server Pattern
+## CLI Tool Pattern
 
-All MCP servers follow the same architecture:
+All CLI tools follow a consistent architecture:
 
-1. **stdin/stdout communication** - JSON-RPC style protocol
-2. **Standard handlers**:
-   - `initialize` - Return protocol version and capabilities
-   - `tools/list` - Return available tools
-   - `tools/call` - Execute tool calls
-3. **stderr logging** - Use `log()` function for debugging
-4. **Consistent error handling** - Return structured error messages
+1. **Command-line arguments** - Using `argparse` for subcommands and flags
+2. **Formatted output** - Pretty-printed by default, JSON mode with `--json` flag
+3. **UTF-8 support** - Proper handling of German umlauts and special characters
+4. **Exit codes** - 0 for success, 1 for errors
+5. **Consistent error handling** - Clear error messages to stderr
 
 ## Dependencies
 
@@ -112,8 +107,9 @@ All MCP servers follow the same architecture:
 - `requests>=2.31.0`
 - `python-dotenv>=1.0.0`
 
-### Cudos Controlling MCP Server
-- Python stdlib only (urllib, json)
+### Cudos Controlling CLI
+- Python stdlib only (argparse, json, urllib)
+- Optional: python-dotenv (for .env file support)
 
 ### Sales Reminder Tool
 - Python stdlib only (calendar, datetime)
@@ -127,28 +123,27 @@ pip install -r requirements.txt
 
 ### Adding a New Tool
 
-1. Create directory: `NewToolMCPServer/` or `NewToolCLI/`
-2. Add `server.py` (MCP) or main script (CLI)
+1. Create directory: `NewToolCLI/`
+2. Add main script with `argparse` CLI interface
 3. Create tool-specific `README.md`
 4. Add dependencies to `requirements.txt`
-5. Create symlink in root: `ln -s NewToolMCPServer/server.py new-tool-mcp`
+5. Create symlink in root: `ln -s NewToolCLI/tool_name.py new-tool`
 6. Update this README
 
-### Testing MCP Servers
+### Testing CLI Tools
 
-Use `mcporter` for testing:
+Test directly from the command line:
 
 ```bash
-# List tools
-mcporter call <server-name>.tools/list
+# Basic test
+./tool-name --help
 
-# Call a tool
-mcporter call <server-name>.<tool-name> param1=value1 param2=value2
+# Test functionality
+./tool-name subcommand "query or args"
+
+# Test JSON output
+./tool-name subcommand "query" --json | jq '.'
 ```
-
-## API Specifications
-
-- [RolX Chat API Spec](./RolXChatAPI-spec.json) - OpenAPI spec for Controlling API
 
 ## License
 

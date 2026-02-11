@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-**openclaw_toolbox** (formerly mb_tools_bar) is a collection of MCP servers and CLI tools for Cudos/moltbot internal systems:
-- **CudosControllingMCPServer**: MCP server for querying RolX (timesheet) and Bexio (invoicing) via natural language
+**openclaw_toolbox** (formerly mb_tools_bar) is a collection of CLI tools for Cudos/moltbot internal systems:
+- **Cudos Controlling CLI**: Command-line tool for querying RolX (timesheet) and Bexio (invoicing) via natural language
 - **SalesReminderTool**: Automated email reminder for sales potential updates
 
 ## Repository Structure
@@ -13,13 +13,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```
 openclaw_toolbox/
 ├── venv/                           # Shared virtual environment
-├── CudosControllingMCPServer/
-│   ├── server.py                   # Main MCP server (converted from mbtools.py)
+├── CudosControllingTool/
+│   ├── cudos_controlling.py        # CLI tool
 │   └── README.md                   # Tool-specific docs
 ├── SalesReminderTool/
 │   ├── sales_reminder.py          # CLI tool
 │   └── README.md                   # Tool-specific docs
-├── cudos-controlling-mcp           # Symlink → CudosControllingMCPServer/server.py
+├── cudos-controlling               # Symlink → CudosControllingTool/cudos_controlling.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
 ├── requirements.txt               # All dependencies
 ├── setup_venv.sh                  # Virtual environment setup
@@ -30,22 +30,25 @@ openclaw_toolbox/
 
 ## Architecture
 
-### CudosControllingMCPServer (CudosControllingMCPServer/server.py)
-- MCP server for RolX and Bexio queries (converted from CLI to MCP protocol)
-- Uses stdin/stdout for MCP communication (JSON-RPC style)
+### Cudos Controlling CLI (CudosControllingTool/cudos_controlling.py)
+- Command-line tool for RolX and Bexio queries via natural language
+- Uses argparse for CLI interface with subcommands
 - Authentication via:
   - `.env` file in repository root (loaded via python-dotenv if available)
   - Environment variable `MBTOOLS_API_KEY`
   - Config file `~/.mbtools/config.json`
 - API base URL: `https://controlling-assistant-prod.nicedune-9fff3676.switzerlandnorth.azurecontainerapps.io`
-- Tools exposed:
-  - `controlling_query_rolx` - Natural language timesheet queries
-  - `controlling_query_bexio` - Natural language invoice queries
+- Subcommands:
+  - `rolx` - Natural language timesheet queries
+  - `bexio` - Natural language invoice queries
 - API endpoints:
   - `/rolx/query` - RolX timesheet data
   - `/bexio/query` - Bexio invoice data
-- Returns JSON responses with `ensure_ascii=False` for proper UTF-8 handling (German umlauts)
-- Dependencies: Python stdlib only (urllib, json)
+- Output modes:
+  - Default: Pretty-printed JSON with UTF-8 support (German umlauts)
+  - `--json` flag: Raw JSON for scripting
+- Exit codes: 0 for success, 1 for errors
+- Dependencies: Python stdlib only (argparse, urllib, json)
 
 ### SalesReminderTool (SalesReminderTool/sales_reminder.py)
 - CLI tool for automated sales potential reminders
@@ -56,53 +59,64 @@ openclaw_toolbox/
 - Email signature: "Retos Bot Morticia 💪"
 - Dependencies: Python stdlib only (calendar, datetime)
 
-## MCP Server Pattern
+## CLI Tool Pattern
 
-All MCP servers follow the same architecture:
+All CLI tools follow a consistent architecture:
 
-### Communication
-- **stdin/stdout**: JSON-RPC style protocol
-- **stderr**: Logging via `log()` function
+### Command Structure
+- **Subcommands**: Use argparse with subparsers for different operations
+- **Flags**: Common flags like `--json` for machine-readable output
+- **Exit codes**: 0 for success, 1 for errors
 
-### Standard Handlers
+### Standard Implementation
 ```python
-def handle_request(request: dict) -> dict:
-    method = request.get('method')
-    params = request.get('params', {})
+import argparse
+import json
+import sys
 
-    if method == 'initialize':
-        return {
-            "protocolVersion": "2024-11-05",
-            "capabilities": {"tools": {}},
-            "serverInfo": {"name": "...", "version": "1.0.0"}
-        }
+def main():
+    parser = argparse.ArgumentParser(
+        prog='tool-name',
+        description='Tool description',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog='Usage examples here'
+    )
 
-    elif method == 'tools/list':
-        return {"tools": [...]}  # List of tool definitions
+    subparsers = parser.add_subparsers(dest='command', required=True)
 
-    elif method == 'tools/call':
-        tool_name = params.get('name')
-        args = params.get('arguments', {})
-        result = execute_tool(tool_name, args)
-        return {
-            "content": [{"type": "text", "text": json.dumps(result, ...)}]
-        }
+    # Add subcommands
+    parser_cmd1 = subparsers.add_parser('cmd1', help='Command 1 help')
+    parser_cmd1.add_argument('query', help='Query argument')
+    parser_cmd1.add_argument('--json', action='store_true', help='Output JSON')
+
+    args = parser.parse_args()
+
+    # Execute command
+    result = execute_command(args.command, args.query)
+
+    # Format and output
+    output = format_output(result, as_json=args.json)
+    print(output)
+
+    # Exit with appropriate code
+    sys.exit(1 if "error" in result else 0)
+
+if __name__ == '__main__':
+    main()
 ```
 
-### Main Loop
+### Output Formatting
 ```python
-def main():
-    log("Server starting...")
-    while True:
-        try:
-            line = input()
-            request = json.loads(line)
-            response = handle_request(request)
-            if 'id' in request:
-                response['id'] = request['id']
-            send_response(response)
-        except EOFError:
-            break
+def format_output(result: dict, as_json: bool = False) -> str:
+    """Format API result for display."""
+    if as_json:
+        return json.dumps(result, indent=2, ensure_ascii=False)
+
+    # Pretty-print by default
+    if "error" in result:
+        return f"Error: {result['error']}"
+
+    return json.dumps(result, indent=2, ensure_ascii=False)
 ```
 
 ## Common Commands
@@ -113,7 +127,7 @@ bash setup_venv.sh
 source venv/bin/activate
 ```
 
-### CudosControllingMCPServer
+### Cudos Controlling CLI
 ```bash
 # Setup API key (option 1: .env file - recommended)
 cp .env.example .env
@@ -124,14 +138,17 @@ export MBTOOLS_API_KEY="your-key"
 
 # Or option 3: create ~/.mbtools/config.json with {"api_key": "..."}
 
-# Register with mcporter
-mcporter config add cudos-controlling --command "python3 $(pwd)/cudos-controlling-mcp"
-
 # Query RolX timesheet
-mcporter call cudos-controlling.controlling_query_rolx query="How many hours did Reto Bättig work in 2025 per task"
+./cudos-controlling rolx "How many hours did Reto Bättig work in 2025 per task"
+./cudos-controlling rolx "Wie viele Stunden hat Reto gearbeitet?" --json
 
 # Query Bexio invoicing
-mcporter call cudos-controlling.controlling_query_bexio query="Give me invoice #0290.001.01.01"
+./cudos-controlling bexio "Give me invoice #0290.001.01.01"
+./cudos-controlling bexio "Show all invoices with Project Number 290" --json
+
+# Help
+./cudos-controlling --help
+./cudos-controlling rolx --help
 ```
 
 ### SalesReminderTool
@@ -151,8 +168,9 @@ Consolidated in `requirements.txt`:
 - `requests>=2.31.0`
 - `python-dotenv>=1.0.0` (for .env file support)
 
-**CudosControllingMCPServer:**
-- Python stdlib only (urllib, json)
+**Cudos Controlling CLI:**
+- Python stdlib only (argparse, urllib, json)
+- Optional: python-dotenv (for .env file support)
 
 **SalesReminderTool:**
 - Python stdlib only (calendar, datetime)
@@ -165,21 +183,23 @@ pip install -r requirements.txt
 ## File Paths (Important for Tools)
 
 All tools are in subdirectories:
-- `CudosControllingMCPServer/server.py` - Controlling MCP server
+- `CudosControllingTool/cudos_controlling.py` - Controlling CLI tool
 - `SalesReminderTool/sales_reminder.py` - Sales reminder CLI
 
 Symlinks in root for convenience:
-- `cudos-controlling-mcp` → `CudosControllingMCPServer/server.py`
+- `cudos-controlling` → `CudosControllingTool/cudos_controlling.py`
 - `sales-reminder` → `SalesReminderTool/sales_reminder.py`
 
 ## Testing
 
 No formal test suite exists. Manual testing approach:
 
-**CudosControllingMCPServer:**
+**Cudos Controlling CLI:**
 - Test against live API with known queries
 - Verify error handling (missing API key, invalid query, etc.)
 - Check UTF-8 handling with German umlauts
+- Test subcommands and flags (--json, --help)
+- Verify exit codes (0 for success, 1 for errors)
 
 **SalesReminderTool:**
 - Test with specific dates by temporarily modifying the date check
@@ -189,12 +209,14 @@ No formal test suite exists. Manual testing approach:
 ## Code Patterns
 
 **Error handling**:
-- MCP servers: Return `{"error": "..."}` in response
-- CLI tools: Print to stderr and sys.exit(1)
+- CLI tools: Return error dict with `{"error": "..."}` key
+- Print error messages to stderr when appropriate
+- Exit with code 1 on errors, 0 on success
 
-**Logging**:
-- MCP servers: Use stderr via `log()` function
-- CLI tools: Use stdout/stderr directly
+**Output**:
+- CLI tools: Print to stdout (data) and stderr (errors/logging)
+- Support both formatted (default) and JSON (--json flag) output
+- Use `ensure_ascii=False` for UTF-8 support
 
 **Configuration**:
 - Prefer environment variables over config files where possible
@@ -206,24 +228,26 @@ No formal test suite exists. Manual testing approach:
 
 ## Adding New Tools
 
-1. Create directory: `NewToolMCPServer/` or `NewToolCLI/`
-2. Add main script: `server.py` (MCP) or tool-specific name (CLI)
+1. Create directory: `NewToolCLI/`
+2. Add main script with CLI implementation using argparse
 3. Create tool-specific `README.md`
 4. Add dependencies to `requirements.txt` if needed
-5. Create symlink in root: `ln -s NewToolMCPServer/server.py new-tool-mcp`
+5. Create symlink in root: `ln -s NewToolCLI/tool_name.py new-tool`
 6. Update main `README.md`
 7. Update this `CLAUDE.md`
 
-For MCP servers, follow the established pattern:
-- Use `handle_request()` with initialize/tools/list/tools/call
-- Use `log()` for stderr logging
-- Use `send_response()` for JSON output
-- Include request ID in response if present
+For CLI tools, follow the established pattern:
+- Use `argparse` with subparsers for subcommands
+- Implement `--json` flag for machine-readable output
+- Use `ensure_ascii=False` for UTF-8 support
+- Exit with code 0 for success, 1 for errors
+- Print data to stdout, errors to stderr
 
 ## Legacy Files (Removed)
 
 The following files were removed during restructuring:
-- `mbtools.py` - Converted to `CudosControllingMCPServer/server.py`
+- `mbtools.py` - Original CLI tool, converted to MCP server, then to CLI again
+- `CudosControllingTool/server.py` - MCP server version (removed, replaced by cudos_controlling.py CLI)
 - `mcp_server_google_docs.py` - Removed (Google Docs MCP Server)
 - `setup_docs_auth.py` - Removed (Google Docs MCP Server)
 - `GoogleDocsMCPServer/` - Removed completely
