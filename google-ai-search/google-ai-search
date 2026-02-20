@@ -1,0 +1,249 @@
+#!/usr/bin/env python3
+"""
+google-ai-search - Kommandozeilen-Tool für Google Search AI via Gemini API
+
+Verwendet die Gemini CLI mit aktivierter Google Search Extension.
+"""
+
+import argparse
+import subprocess
+import sys
+import json
+import os
+from pathlib import Path
+
+
+def check_gemini_installed():
+    """Prüft ob gemini CLI installiert ist"""
+    try:
+        subprocess.run(["gemini", "--version"], capture_output=True, check=True)
+        return True
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return False
+
+
+def enable_search_extension():
+    """Aktiviert die Google Search Extension falls nötig"""
+    try:
+        result = subprocess.run(
+            ["gemini", "extensions", "enable", "google-search"],
+            capture_output=True,
+            text=True
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def load_config():
+    """Lädt Konfiguration aus config.json im Tool-Verzeichnis"""
+    config_path = Path(__file__).parent / "config.json"
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+
+def get_api_key():
+    """Holt API Key aus Umgebungsvariable oder Config-Datei"""
+    # Priorität 1: Umgebungsvariable
+    env_key = os.environ.get("GEMINI_API_KEY")
+    if env_key:
+        return env_key
+    
+    # Priorität 2: Config-Datei
+    config = load_config()
+    return config.get("gemini_api_key")
+
+
+def search(query, model=None, json_output=False, raw=False):
+    """
+    Führt eine Google Search AI Abfrage durch
+    
+    Args:
+        query: Die Suchanfrage
+        model: Optional ein bestimmtes Gemini-Modell
+        json_output: JSON-Format ausgeben
+        raw: Rohe Ausgabe ohne Formatierung
+    """
+    if not check_gemini_installed():
+        print("❌ Fehler: 'gemini' CLI nicht gefunden.", file=sys.stderr)
+        print("   Installiere mit: brew install gemini-cli", file=sys.stderr)
+        sys.exit(1)
+    
+    # API Key holen und als Env-Variable setzen
+    api_key = get_api_key()
+    if not api_key:
+        print("❌ Fehler: Kein Gemini API Key gefunden.", file=sys.stderr)
+        print("   Optionen:", file=sys.stderr)
+        print("   1. Setze GEMINI_API_KEY Umgebungsvariable", file=sys.stderr)
+        print("   2. Füge key zu ~/Development/mb_tools_bar/google-ai-search/config.json hinzu", file=sys.stderr)
+        sys.exit(1)
+    
+    env = os.environ.copy()
+    env["GEMINI_API_KEY"] = api_key
+    
+    # Baue den Prompt mit Google Search Anweisung
+    prompt = f"""Verwende Google Search, um folgende Frage zu beantworten: {query}
+
+Wichtig:
+- Nutze Google Search für aktuelle Informationen
+- Zitiere Quellen mit URLs
+- Wenn mehrere Ergebnisse relevant sind, nenne die wichtigsten
+- Antworte prägnant aber vollständig"""
+
+    # Baue den gemini Befehl
+    cmd = ["gemini"]
+    
+    if model:
+        cmd.extend(["--model", model])
+    
+    if json_output:
+        cmd.extend(["--output-format", "json"])
+    
+    cmd.append(prompt)
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            env=env
+        )
+        
+        if result.returncode != 0:
+            print(f"❌ Fehler: {result.stderr}", file=sys.stderr)
+            sys.exit(1)
+        
+        if raw:
+            print(result.stdout)
+        elif json_output:
+            try:
+                data = json.loads(result.stdout)
+                print(json.dumps(data, indent=2, ensure_ascii=False))
+            except json.JSONDecodeError:
+                print(result.stdout)
+        else:
+            print(result.stdout)
+            
+    except subprocess.TimeoutExpired:
+        print("❌ Timeout: Die Anfrage hat zu lange gedauert.", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"❌ Fehler: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def interactive_mode():
+    """Interaktiver Modus für wiederholte Abfragen"""
+    print("🔍 Google AI Search - Interaktiver Modus")
+    print("Tippe 'exit' oder 'quit' zum Beenden\n")
+    
+    while True:
+        try:
+            query = input("Suche > ").strip()
+            
+            if query.lower() in ("exit", "quit", "q"):
+                print("👋 Auf Wiedersehen!")
+                break
+            
+            if not query:
+                continue
+            
+            print()
+            search(query)
+            print()
+            
+        except KeyboardInterrupt:
+            print("\n👋 Auf Wiedersehen!")
+            break
+        except EOFError:
+            break
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="Google Search AI via Gemini API - Kommandozeilen-Tool",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Beispiele:
+  google-ai-search "Aktueller Stand von Fusion Energy"
+  google-ai-search --json "Wetter in Zürich morgen"
+  google-ai-search --model gemini-1.5-pro "Python 3.12 neue Features"
+  google-ai-search -i                    # Interaktiver Modus
+        """
+    )
+    
+    parser.add_argument(
+        "query",
+        nargs="?",
+        help="Die Suchanfrage (optional im interaktiven Modus)"
+    )
+    
+    parser.add_argument(
+        "-i", "--interactive",
+        action="store_true",
+        help="Interaktiver Modus für wiederholte Abfragen"
+    )
+    
+    parser.add_argument(
+        "-m", "--model",
+        default=None,
+        help="Gemini-Modell (default: gemini-1.5-flash-latest)"
+    )
+    
+    parser.add_argument(
+        "-j", "--json",
+        action="store_true",
+        help="Ausgabe als JSON"
+    )
+    
+    parser.add_argument(
+        "-r", "--raw",
+        action="store_true",
+        help="Rohe Ausgabe ohne Formatierung"
+    )
+    
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Richte Google Search Extension ein"
+    )
+    
+    parser.add_argument(
+        "--version",
+        action="version",
+        version="%(prog)s 1.0.0"
+    )
+    
+    args = parser.parse_args()
+    
+    # Setup-Modus
+    if args.setup:
+        print("🔧 Aktiviere Google Search Extension...")
+        if enable_search_extension():
+            print("✅ Google Search Extension aktiviert!")
+        else:
+            print("⚠️  Konnte Extension nicht aktivieren. Prüfe 'gemini extensions --help'")
+        return
+    
+    # Interaktiver Modus
+    if args.interactive:
+        interactive_mode()
+        return
+    
+    # Query muss angegeben sein
+    if not args.query:
+        parser.print_help()
+        sys.exit(1)
+    
+    # Normale Suche
+    search(args.query, args.model, args.json, args.raw)
+
+
+if __name__ == "__main__":
+    main()
