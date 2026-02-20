@@ -1,0 +1,3 @@
+#!/bin/bash
+# NZZ Reader Wrapper
+exec /home/reto/Development/mb_tools_bar/nzz-reader/nzz-reader.py "$@"
