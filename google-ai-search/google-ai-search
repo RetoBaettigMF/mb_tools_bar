@@ -2,37 +2,41 @@
 """
 google-ai-search - Kommandozeilen-Tool für Google Search AI via Gemini API
 
-Verwendet die Gemini CLI mit aktivierter Google Search Extension.
+Direkte API-Nutzung ohne externes gemini CLI.
 """
 
 import argparse
-import subprocess
 import sys
 import json
 import os
+import re
 from pathlib import Path
 
+# Optional: requests verwenden wenn verfügbar, sonst urllib
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+    import urllib.request
+    import urllib.error
+    import urllib.parse
+    import ssl
 
-def check_gemini_installed():
-    """Prüft ob gemini CLI installiert ist"""
-    try:
-        subprocess.run(["gemini", "--version"], capture_output=True, check=True)
-        return True
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        return False
+
+API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
+DEFAULT_MODEL = "gemini-1.5-flash-latest"
 
 
-def enable_search_extension():
-    """Aktiviert die Google Search Extension falls nötig"""
-    try:
-        result = subprocess.run(
-            ["gemini", "extensions", "enable", "google-search"],
-            capture_output=True,
-            text=True
-        )
-        return result.returncode == 0
-    except Exception:
-        return False
+class Colors:
+    """ANSI Farbcodes für Terminal-Output"""
+    RED = '\033[91m'
+    GREEN = '\033[92m'
+    YELLOW = '\033[93m'
+    BLUE = '\033[94m'
+    CYAN = '\033[96m'
+    BOLD = '\033[1m'
+    RESET = '\033[0m'
 
 
 def load_config():
@@ -42,8 +46,10 @@ def load_config():
         try:
             with open(config_path) as f:
                 return json.load(f)
-        except Exception:
-            pass
+        except json.JSONDecodeError as e:
+            print_error(f"Config-Datei ist kein gültiges JSON: {e}")
+        except Exception as e:
+            print_error(f"Fehler beim Laden der Config: {e}")
     return {}
 
 
@@ -59,7 +65,111 @@ def get_api_key():
     return config.get("gemini_api_key")
 
 
-def search(query, model=None, json_output=False, raw=False):
+def print_error(msg):
+    """Printet eine Fehlermeldung in Rot"""
+    print(f"{Colors.RED}{Colors.BOLD}❌ Fehler:{Colors.RESET} {Colors.RED}{msg}{Colors.RESET}", file=sys.stderr)
+
+
+def print_warning(msg):
+    """Printet eine Warnung in Gelb"""
+    print(f"{Colors.YELLOW}⚠️  {msg}{Colors.RESET}", file=sys.stderr)
+
+
+def print_success(msg):
+    """Printet eine Erfolgsmeldung in Grün"""
+    print(f"{Colors.GREEN}✅ {msg}{Colors.RESET}")
+
+
+def print_info(msg):
+    """Printet eine Info in Cyan"""
+    print(f"{Colors.CYAN}ℹ️  {msg}{Colors.RESET}")
+
+
+def validate_api_key(api_key):
+    """Prüft ob der API-Key gültig aussieht"""
+    if not api_key:
+        return False, "Kein API Key gefunden"
+    
+    # Gemini API Keys sind typischerweise 39 Zeichen lang und starten mit "AIza..."
+    if len(api_key) < 10:
+        return False, "API Key sieht zu kurz aus"
+    
+    if not api_key.startswith("AIza"):
+        print_warning("API Key startet nicht mit 'AIza' - typischerweise beginnen Gemini Keys damit")
+    
+    return True, None
+
+
+def api_request_with_requests(url, data, headers, timeout=30):
+    """Macht einen API Request mit requests library"""
+    try:
+        response = requests.post(url, json=data, headers=headers, timeout=timeout)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.Timeout:
+        raise TimeoutError(f"Request hat {timeout}s überschritten")
+    except requests.exceptions.ConnectionError as e:
+        raise ConnectionError(f"Verbindungsfehler: {e}")
+    except requests.exceptions.HTTPError as e:
+        if response.status_code == 400:
+            raise ValueError(f"Ungültige Anfrage (400): {response.text}")
+        elif response.status_code == 401:
+            raise PermissionError(f"Ungültiger API Key (401). Prüfe deinen GEMINI_API_KEY")
+        elif response.status_code == 403:
+            raise PermissionError(f"Zugriff verweigert (403). API Key hat möglicherweise keine Berechtigung für Google Search")
+        elif response.status_code == 429:
+            raise RuntimeError(f"Rate limit überschritten (429). Bitte warte einen Moment")
+        elif response.status_code >= 500:
+            raise RuntimeError(f"Serverfehler ({response.status_code}). Google API ist möglicherweise nicht verfügbar")
+        else:
+            raise RuntimeError(f"HTTP Fehler {response.status_code}: {response.text}")
+
+
+def api_request_with_urllib(url, data, headers, timeout=30):
+    """Macht einen API Request mit urllib (Fallback)"""
+    try:
+        request = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode('utf-8'),
+            headers=headers,
+            method='POST'
+        )
+        
+        # SSL Context der Zertifikate validiert
+        context = ssl.create_default_context()
+        
+        with urllib.request.urlopen(request, timeout=timeout, context=context) as response:
+            return json.loads(response.read().decode('utf-8'))
+            
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode('utf-8')
+        if e.code == 400:
+            raise ValueError(f"Ungültige Anfrage (400): {error_body}")
+        elif e.code == 401:
+            raise PermissionError(f"Ungültiger API Key (401). Prüfe deinen GEMINI_API_KEY")
+        elif e.code == 403:
+            raise PermissionError(f"Zugriff verweigert (403). API Key hat möglicherweise keine Berechtigung für Google Search")
+        elif e.code == 429:
+            raise RuntimeError(f"Rate limit überschritten (429). Bitte warte einen Moment")
+        elif e.code >= 500:
+            raise RuntimeError(f"Serverfehler ({e.code}). Google API ist möglicherweise nicht verfügbar")
+        else:
+            raise RuntimeError(f"HTTP Fehler {e.code}: {error_body}")
+    except urllib.error.URLError as e:
+        raise ConnectionError(f"Verbindungsfehler: {e.reason}")
+    except TimeoutError:
+        raise TimeoutError(f"Request hat {timeout}s überschritten")
+
+
+def make_api_request(url, data, headers, timeout=30):
+    """Wählt die beste Methode für API Requests"""
+    if HAS_REQUESTS:
+        return api_request_with_requests(url, data, headers, timeout)
+    else:
+        return api_request_with_urllib(url, data, headers, timeout)
+
+
+def search(query, model=None, json_output=False, raw=False, timeout=30, show_tools=False):
     """
     Führt eine Google Search AI Abfrage durch
     
@@ -68,98 +178,199 @@ def search(query, model=None, json_output=False, raw=False):
         model: Optional ein bestimmtes Gemini-Modell
         json_output: JSON-Format ausgeben
         raw: Rohe Ausgabe ohne Formatierung
+        timeout: Timeout in Sekunden
+        show_tools: Zeige verwendete Tools an
     """
-    if not check_gemini_installed():
-        print("❌ Fehler: 'gemini' CLI nicht gefunden.", file=sys.stderr)
-        print("   Installiere mit: brew install gemini-cli", file=sys.stderr)
-        sys.exit(1)
-    
-    # API Key holen und als Env-Variable setzen
+    # API Key validieren
     api_key = get_api_key()
-    if not api_key:
-        print("❌ Fehler: Kein Gemini API Key gefunden.", file=sys.stderr)
-        print("   Optionen:", file=sys.stderr)
-        print("   1. Setze GEMINI_API_KEY Umgebungsvariable", file=sys.stderr)
-        print("   2. Füge key zu ~/Development/mb_tools_bar/google-ai-search/config.json hinzu", file=sys.stderr)
+    is_valid, error_msg = validate_api_key(api_key)
+    
+    if not is_valid:
+        print_error(error_msg)
+        print(f"\n{Colors.BOLD}So kannst du einen API Key hinzufügen:{Colors.RESET}")
+        print(f"  1. Umgebungsvariable: {Colors.CYAN}export GEMINI_API_KEY='dein-key'{Colors.RESET}")
+        print(f"  2. Config-Datei: {Colors.CYAN}{Path(__file__).parent}/config.json{Colors.RESET}")
+        print(f"\n{Colors.BOLD}API Key erstellen:{Colors.RESET}")
+        print(f"  → https://makersuite.google.com/app/apikey")
         sys.exit(1)
     
-    env = os.environ.copy()
-    env["GEMINI_API_KEY"] = api_key
+    model = model or DEFAULT_MODEL
     
-    # Baue den Prompt mit Google Search Anweisung
-    prompt = f"""Verwende Google Search, um folgende Frage zu beantworten: {query}
+    # API Endpoint
+    url = f"{API_BASE_URL}/models/{model}:generateContent?key={api_key}"
+    
+    # Request Body mit Google Search Tool
+    data = {
+        "contents": [{
+            "parts": [{
+                "text": f"""Beantworte folgende Frage mit aktuellen Informationen aus dem Internet:
+
+{query}
 
 Wichtig:
 - Nutze Google Search für aktuelle Informationen
-- Zitiere Quellen mit URLs
-- Wenn mehrere Ergebnisse relevant sind, nenne die wichtigsten
-- Antworte prägnant aber vollständig"""
-
-    # Baue den gemini Befehl
-    cmd = ["gemini"]
+- Zitiere Quellen mit URLs wenn möglich
+- Antworte auf Deutsch (wenn die Frage auf Deutsch ist)
+- Sei prägnant aber vollständig"""
+            }]
+        }],
+        "tools": [{
+            "google_search": {}
+        }],
+        "generationConfig": {
+            "temperature": 0.7,
+            "maxOutputTokens": 2048
+        }
+    }
     
-    if model:
-        cmd.extend(["--model", model])
-    
-    if json_output:
-        cmd.extend(["--output-format", "json"])
-    
-    cmd.append(prompt)
+    headers = {
+        "Content-Type": "application/json"
+    }
     
     try:
-        result = subprocess.run(
-            cmd,
-            capture_output=True,
-            text=True,
-            timeout=60,
-            env=env
-        )
+        if not json_output and not raw:
+            print_info(f"Frage Gemini ({model}) mit Google Search...")
         
-        if result.returncode != 0:
-            print(f"❌ Fehler: {result.stderr}", file=sys.stderr)
+        result = make_api_request(url, data, headers, timeout)
+        
+        # Antwort extrahieren
+        candidates = result.get("candidates", [])
+        if not candidates:
+            print_error("Keine Antwort von der API erhalten")
+            if "promptFeedback" in result:
+                feedback = result["promptFeedback"]
+                if "blockReason" in feedback:
+                    print_error(f"Anfrage blockiert: {feedback['blockReason']}")
             sys.exit(1)
         
-        if raw:
-            print(result.stdout)
-        elif json_output:
-            try:
-                data = json.loads(result.stdout)
-                print(json.dumps(data, indent=2, ensure_ascii=False))
-            except json.JSONDecodeError:
-                print(result.stdout)
+        content = candidates[0].get("content", {})
+        parts = content.get("parts", [])
+        
+        if not parts:
+            print_error("Leere Antwort von der API")
+            sys.exit(1)
+        
+        text_response = parts[0].get("text", "")
+        
+        # Grounding-Infos extrahieren (Quellen)
+        grounding = candidates[0].get("groundingMetadata", {})
+        sources = []
+        
+        if "groundingChunks" in grounding:
+            for chunk in grounding["groundingChunks"]:
+                if "web" in chunk:
+                    web = chunk["web"]
+                    sources.append({
+                        "title": web.get("title", "Unbekannt"),
+                        "uri": web.get("uri", "")
+                    })
+        
+        # Verwendete Tools anzeigen
+        if show_tools and not json_output and not raw:
+            print(f"\n{Colors.CYAN}🔧 Verwendete Tools:{Colors.RESET}")
+            print(f"  • Google Search")
+            if sources:
+                print(f"  • {len(sources)} Quellen gefunden")
+            print()
+        
+        # Output formatieren
+        if json_output:
+            output = {
+                "query": query,
+                "model": model,
+                "response": text_response,
+                "sources": sources
+            }
+            print(json.dumps(output, indent=2, ensure_ascii=False))
+        elif raw:
+            print(text_response)
         else:
-            print(result.stdout)
+            print(f"\n{text_response}\n")
             
-    except subprocess.TimeoutExpired:
-        print("❌ Timeout: Die Anfrage hat zu lange gedauert.", file=sys.stderr)
+            # Quellen anzeigen
+            if sources:
+                print(f"{Colors.CYAN}📚 Quellen:{Colors.RESET}")
+                seen_uris = set()
+                for i, source in enumerate(sources[:5], 1):  # Max 5 Quellen
+                    uri = source["uri"]
+                    if uri not in seen_uris:
+                        seen_uris.add(uri)
+                        title = source["title"]
+                        # URL kürzen wenn zu lang
+                        display_uri = uri if len(uri) < 70 else uri[:67] + "..."
+                        print(f"  {i}. {Colors.BOLD}{title}{Colors.RESET}")
+                        print(f"     {Colors.BLUE}{display_uri}{Colors.RESET}")
+                print()
+                
+    except PermissionError as e:
+        print_error(str(e))
+        print(f"\n{Colors.BOLD}Lösung:{Colors.RESET}")
+        print("  1. Erstelle einen neuen API Key: https://makersuite.google.com/app/apikey")
+        print("  2. Aktiviere die Gemini API in der Google Cloud Console")
+        print("  3. Prüfe ob dein Projekt Billing hat (für Search-Features nötig)")
         sys.exit(1)
+        
+    except ConnectionError as e:
+        print_error(str(e))
+        print(f"\n{Colors.BOLD}Mögliche Ursachen:{Colors.RESET}")
+        print("  • Keine Internetverbindung")
+        print("  • Firewall/Proxy blockiert den Zugriff")
+        print("  • DNS-Probleme")
+        sys.exit(1)
+        
+    except TimeoutError as e:
+        print_error(str(e))
+        print(f"\n{Colors.BOLD}Tipps:{Colors.RESET}")
+        print(f"  • Erhöhe das Timeout: --timeout 60")
+        print(f"  • Probiere ein kleineres Modell: --model gemini-1.5-flash")
+        print(f"  • Vereinfache deine Anfrage")
+        sys.exit(1)
+        
+    except ValueError as e:
+        print_error(str(e))
+        sys.exit(1)
+        
+    except RuntimeError as e:
+        print_error(str(e))
+        sys.exit(1)
+        
     except Exception as e:
-        print(f"❌ Fehler: {e}", file=sys.stderr)
+        print_error(f"Unerwarteter Fehler: {e}")
+        if os.environ.get("DEBUG"):
+            import traceback
+            traceback.print_exc()
         sys.exit(1)
 
 
 def interactive_mode():
     """Interaktiver Modus für wiederholte Abfragen"""
-    print("🔍 Google AI Search - Interaktiver Modus")
+    print(f"{Colors.CYAN}{Colors.BOLD}🔍 Google AI Search - Interaktiver Modus{Colors.RESET}")
     print("Tippe 'exit' oder 'quit' zum Beenden\n")
+    
+    # API Key prüfen
+    api_key = get_api_key()
+    if not api_key:
+        print_error("Kein API Key gefunden. Bitte zuerst einrichten.")
+        sys.exit(1)
+    
+    print_success("API Key gefunden. Bereit für Anfragen.\n")
     
     while True:
         try:
-            query = input("Suche > ").strip()
+            query = input(f"{Colors.BOLD}Suche >{Colors.RESET} ").strip()
             
             if query.lower() in ("exit", "quit", "q"):
-                print("👋 Auf Wiedersehen!")
+                print(f"\n{Colors.GREEN}👋 Auf Wiedersehen!{Colors.RESET}")
                 break
             
             if not query:
                 continue
             
             print()
-            search(query)
-            print()
+            search(query, show_tools=True)
             
         except KeyboardInterrupt:
-            print("\n👋 Auf Wiedersehen!")
+            print(f"\n\n{Colors.GREEN}👋 Auf Wiedersehen!{Colors.RESET}")
             break
         except EOFError:
             break
@@ -169,12 +380,17 @@ def main():
     parser = argparse.ArgumentParser(
         description="Google Search AI via Gemini API - Kommandozeilen-Tool",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Beispiele:
+        epilog=f"""
+{Colors.BOLD}Beispiele:{Colors.RESET}
   google-ai-search "Aktueller Stand von Fusion Energy"
   google-ai-search --json "Wetter in Zürich morgen"
   google-ai-search --model gemini-1.5-pro "Python 3.12 neue Features"
   google-ai-search -i                    # Interaktiver Modus
+
+{Colors.BOLD}Hinweise:{Colors.RESET}
+  • API Key wird aus GEMINI_API_KEY Umgebungsvariable oder config.json gelesen
+  • Erstelle einen API Key unter: https://makersuite.google.com/app/apikey
+  • Für Google Search muss das Projekt Billing haben
         """
     )
     
@@ -193,7 +409,7 @@ Beispiele:
     parser.add_argument(
         "-m", "--model",
         default=None,
-        help="Gemini-Modell (default: gemini-1.5-flash-latest)"
+        help=f"Gemini-Modell (default: {DEFAULT_MODEL})"
     )
     
     parser.add_argument(
@@ -209,27 +425,25 @@ Beispiele:
     )
     
     parser.add_argument(
-        "--setup",
+        "-t", "--timeout",
+        type=int,
+        default=30,
+        help="Timeout in Sekunden (default: 30)"
+    )
+    
+    parser.add_argument(
+        "--show-tools",
         action="store_true",
-        help="Richte Google Search Extension ein"
+        help="Zeige verwendete Tools an"
     )
     
     parser.add_argument(
         "--version",
         action="version",
-        version="%(prog)s 1.0.0"
+        version="%(prog)s 2.0.0"
     )
     
     args = parser.parse_args()
-    
-    # Setup-Modus
-    if args.setup:
-        print("🔧 Aktiviere Google Search Extension...")
-        if enable_search_extension():
-            print("✅ Google Search Extension aktiviert!")
-        else:
-            print("⚠️  Konnte Extension nicht aktivieren. Prüfe 'gemini extensions --help'")
-        return
     
     # Interaktiver Modus
     if args.interactive:
@@ -242,7 +456,14 @@ Beispiele:
         sys.exit(1)
     
     # Normale Suche
-    search(args.query, args.model, args.json, args.raw)
+    search(
+        args.query, 
+        args.model, 
+        args.json, 
+        args.raw, 
+        args.timeout,
+        args.show_tools
+    )
 
 
 if __name__ == "__main__":
