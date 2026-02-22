@@ -25,7 +25,7 @@ except ImportError:
 
 
 API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
-DEFAULT_MODEL = "gemini-1.5-flash-latest"
+DEFAULT_MODEL = "gemini-2.5-flash"
 
 
 class Colors:
