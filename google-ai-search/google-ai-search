@@ -256,21 +256,31 @@ Wichtig:
         grounding = candidates[0].get("groundingMetadata", {})
         sources = []
         
+        # groundingChunks verarbeiten - alle URLs sammeln
         if "groundingChunks" in grounding:
             for chunk in grounding["groundingChunks"]:
                 if "web" in chunk:
                     web = chunk["web"]
-                    sources.append({
-                        "title": web.get("title", "Unbekannt"),
-                        "uri": web.get("uri", "")
-                    })
+                    uri = web.get("uri", "")
+                    title = web.get("title", "Unbekannt")
+                    
+                    # Überspringe Google Search Query URLs (nicht die echte Quelle)
+                    if "google.com/search?q=" in uri:
+                        continue
+                    
+                    if uri:
+                        sources.append({
+                            "title": title,
+                            "uri": uri
+                        })
         
         # Verwendete Tools anzeigen
         if show_tools and not json_output and not raw:
             print(f"\n{Colors.CYAN}🔧 Verwendete Tools:{Colors.RESET}")
             print(f"  • Google Search")
-            if sources:
-                print(f"  • {len(sources)} Quellen gefunden")
+            all_chunks = grounding.get("groundingChunks", [])
+            if all_chunks:
+                print(f"  • {len(all_chunks)} Quellen gefunden ({len(sources)} direkt verfügbar)")
             print()
         
         # Output formatieren
@@ -290,16 +300,31 @@ Wichtig:
             # Quellen anzeigen
             if sources:
                 print(f"{Colors.CYAN}📚 Quellen:{Colors.RESET}")
-                seen_uris = set()
-                for i, source in enumerate(sources[:5], 1):  # Max 5 Quellen
+                seen_titles = set()
+                count = 0
+                for source in sources:
+                    if count >= 5:  # Max 5 Quellen
+                        break
+                    title = source["title"]
                     uri = source["uri"]
-                    if uri not in seen_uris:
-                        seen_uris.add(uri)
-                        title = source["title"]
-                        # URL kürzen wenn zu lang
-                        display_uri = uri if len(uri) < 70 else uri[:67] + "..."
-                        print(f"  {i}. {Colors.BOLD}{title}{Colors.RESET}")
-                        print(f"     {Colors.BLUE}{display_uri}{Colors.RESET}")
+                    
+                    # Überspringe Duplikate
+                    if title in seen_titles:
+                        continue
+                    seen_titles.add(title)
+                    count += 1
+                    
+                    # Prüfe ob es eine Vertex AI Redirect URL ist (funktioniert nicht direkt)
+                    if "vertexaisearch.cloud.google.com" in uri:
+                        # Generiere eine Google-Suche URL zum Titel als Workaround
+                        import urllib.parse
+                        search_query = urllib.parse.quote(title)
+                        uri = f"https://www.google.com/search?q={search_query}"
+                    
+                    # URL kürzen wenn zu lang
+                    display_uri = uri if len(uri) < 70 else uri[:67] + "..."
+                    print(f"  {count}. {Colors.BOLD}{title}{Colors.RESET}")
+                    print(f"     {Colors.BLUE}{display_uri}{Colors.RESET}")
                 print()
                 
     except PermissionError as e:
