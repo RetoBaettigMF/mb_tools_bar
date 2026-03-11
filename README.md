@@ -28,6 +28,56 @@ Each tool has its own setup requirements. See individual tool READMEs for detail
 
 ### 🛠️ CLI Tools
 
+#### [NZZ Reader](./nzz-reader/README.md)
+
+Liest NZZ-Artikel aus dem lokalen Scraping-Archiv.
+
+**Features:**
+- Liste der neuesten Artikel anzeigen
+- Vollständige Artikel-Texte lesen
+- Direkt aus der Kommandozeile nutzbar
+
+**Usage:**
+```bash
+# Zeige die neuesten 10 Artikel
+./nzz-reader
+
+# Zeige den vollständigen Text eines Artikels (z.B. Artikel #3)
+./nzz-reader 3
+```
+
+#### [Google AI Search](./google-ai-search/README.md)
+
+Kommandozeilen-Tool für Google Search AI via Gemini API.
+
+**Features:**
+- 🔍 Natürlichsprachige Suche mit Google Search AI
+- 📚 Quellen werden automatisch zitiert
+- 🎯 Direkt in der Shell nutzbar
+- 📦 JSON-Output für Weiterverarbeitung
+- 💬 Interaktiver Modus verfügbar
+
+**Setup:**
+```bash
+# API Key in config.json hinterlegen
+# ODER: GEMINI_API_KEY als Umgebungsvariable setzen
+```
+
+**Usage:**
+```bash
+# Einfache Suche
+./google-ai-search "Aktueller Stand von Fusion Energy"
+
+# JSON-Output
+./google-ai-search --json "Wetter in Zürich morgen"
+
+# Bestimmtes Modell verwenden
+./google-ai-search --model gemini-1.5-pro "Python 3.12 neue Features"
+
+# Interaktiver Modus
+./google-ai-search -i
+```
+
 #### [Cudos Controlling CLI](./CudosControllingTool/README.md)
 
 Query RolX (timesheet) and Bexio (invoicing) via natural language from the command line.
@@ -75,13 +125,20 @@ python3 sales-reminder recipient@example.com
 ## Architecture
 
 ```
-openclaw_toolbox/
+mb_tools_bar/
 ├── venv/                           # Shared virtual environment
 ├── CudosControllingTool/
 │   ├── cudos_controlling.py        # CLI tool
 │   └── README.md
 ├── SalesReminderTool/
 │   ├── sales_reminder.py           # CLI tool
+│   └── README.md
+├── nzz-reader/                     # NZZ Reader CLI
+│   ├── nzz-reader                  # Main script
+│   └── README.md
+├── google-ai-search/               # Google AI Search CLI
+│   ├── google-ai-search            # Main script
+│   ├── config.json                 # API key config (git-ignored)
 │   └── README.md
 ├── cudos-controlling               # Symlink → CudosControllingTool/cudos_controlling.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py

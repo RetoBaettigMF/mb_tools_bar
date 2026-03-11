@@ -47,3 +47,6 @@ tokens/
 
 # Logs
 *.log
+
+# Configs
+config.json
