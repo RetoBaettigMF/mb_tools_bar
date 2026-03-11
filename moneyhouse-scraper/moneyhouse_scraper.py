@@ -423,8 +423,8 @@ Beispiele:
     )
     
     parser.add_argument('search_term', help='Suchbegriff (z.B. "Cudos AG")')
-    parser.add_argument('--email', required=True, help='E-Mail-Adresse für Moneyhouse-Login')
-    parser.add_argument('--password', required=True, help='Passwort für Moneyhouse-Login')
+    parser.add_argument('--email', help='E-Mail-Adresse für Moneyhouse-Login (oder MONEYHOUSE_EMAIL env var)')
+    parser.add_argument('--password', help='Passwort für Moneyhouse-Login (oder MONEYHOUSE_PASSWORD env var)')
     parser.add_argument('--headless', action='store_true', help='Browser im Hintergrund ausführen')
     parser.add_argument('-o', '--output', default='output.json', help='Ausgabedatei (Standard: output.json)')
     parser.add_argument('--openrouter-key', help='OpenRouter API Key (oder OPENROUTER_API_KEY env var)')
@@ -442,10 +442,19 @@ Beispiele:
                     k, _, v = line.partition('=')
                     os.environ.setdefault(k.strip(), v.strip())
 
-    # API-Key-Auflösung: --openrouter-key > OPENROUTER_API_KEY env var / .env
+    # Zugangsdaten auflösen: CLI-Arg > env var / .env
     openrouter_key = args.openrouter_key or os.environ.get('OPENROUTER_API_KEY')
+    email = args.email or os.environ.get('MONEYHOUSE_EMAIL')
+    password = args.password or os.environ.get('MONEYHOUSE_PASSWORD')
+
     if not openrouter_key:
         print("Fehler: OpenRouter API Key fehlt. Setze --openrouter-key oder OPENROUTER_API_KEY.", file=sys.stderr)
+        sys.exit(1)
+    if not email:
+        print("Fehler: E-Mail fehlt. Setze --email oder MONEYHOUSE_EMAIL.", file=sys.stderr)
+        sys.exit(1)
+    if not password:
+        print("Fehler: Passwort fehlt. Setze --password oder MONEYHOUSE_PASSWORD.", file=sys.stderr)
         sys.exit(1)
 
     print(f"Moneyhouse Scraper gestartet...")
@@ -455,7 +464,7 @@ Beispiele:
     print(f"Modell: {args.model}")
     print("-" * 50)
 
-    async with MoneyhouseScraper(args.email, args.password, args.headless,
+    async with MoneyhouseScraper(email, password, args.headless,
                                   openrouter_key=openrouter_key, model=args.model) as scraper:
         try:
             # Login
