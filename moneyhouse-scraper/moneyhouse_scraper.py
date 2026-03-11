@@ -16,6 +16,7 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import requests
 from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 
 
@@ -23,15 +24,20 @@ from playwright.async_api import async_playwright, Page, Browser, BrowserContext
 BASE_URL = "https://www.moneyhouse.ch"
 SESSION_FILE = "session.json"
 DEFAULT_TIMEOUT = 30000  # 30 Sekunden
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+DEFAULT_MODEL = "google/gemini-2.0-flash-001"
 
 
 class MoneyhouseScraper:
     """Scraper für Moneyhouse.ch"""
     
-    def __init__(self, email: str, password: str, headless: bool = False):
+    def __init__(self, email: str, password: str, headless: bool = False,
+                 openrouter_key: Optional[str] = None, model: str = DEFAULT_MODEL):
         self.email = email
         self.password = password
         self.headless = headless
+        self.openrouter_key = openrouter_key
+        self.model = model
         self.browser: Optional[Browser] = None
         self.context: Optional[BrowserContext] = None
         self.page: Optional[Page] = None
@@ -119,24 +125,12 @@ class MoneyhouseScraper:
         except Exception:
             return False
             
-    async def _take_screenshot(self, name: str):
-        """Mache Screenshot für Debugging"""
-        try:
-            screenshot_path = f"screenshot_{name}.png"
-            await self.page.screenshot(path=screenshot_path, full_page=True)
-            print(f"Screenshot gespeichert: {screenshot_path}")
-        except Exception as e:
-            print(f"Screenshot fehlgeschlagen: {e}")
-
     async def _do_login(self):
         """Führe Login-Prozess durch"""
         print("Login erforderlich...")
         
         await self.page.goto(f"{BASE_URL}/", wait_until='networkidle')
         await self._random_delay(1000, 2000)
-        await self._take_screenshot("01_startpage")
-
-        await self._take_screenshot("02_before_login_click")
 
         # Klicke auf "Anmelden"
         login_selectors = [
@@ -163,8 +157,6 @@ class MoneyhouseScraper:
             await self.page.goto(f"{BASE_URL}/login", wait_until='networkidle')
             await self._random_delay(1000, 2000)
             
-        await self._take_screenshot("03_login_page")
-        
         # Warte auf Login-Formular
         await self.page.wait_for_load_state('networkidle')
         
@@ -225,16 +217,12 @@ class MoneyhouseScraper:
         # Warte auf Login-Abschluss
         await self.page.wait_for_load_state('networkidle')
         await self._random_delay(2000, 3000)
-        
-        await self._take_screenshot("04_after_login_submit")
-        
+
         # Prüfe ob Login erfolgreich
         if await self._is_logged_in():
             print("Login erfolgreich!")
             await self._save_session()
-            await self._take_screenshot("05_login_success")
         else:
-            await self._take_screenshot("05_login_failed")
             raise Exception("Login fehlgeschlagen - bitte Zugangsdaten prüfen")
             
     async def login(self):
@@ -343,103 +331,83 @@ class MoneyhouseScraper:
         digits = re.sub(r"[^\d]", "", value)
         return int(digits) if digits else None
 
-    async def _extract_company_details(self, url: str) -> dict:
-        """Extrahiere Firmendetails von Detailseite"""
+    def _call_openrouter(self, page_text: str) -> Optional[dict]:
+        """Extrahiere Firmendetails via OpenRouter LLM aus dem sichtbaren Seitentext."""
+        system_prompt = """Du extrahierst Firmendetails aus dem sichtbaren Text einer moneyhouse.ch-Seite.
+
+Antworte ausschliesslich mit gültigem JSON (kein Markdown, keine Code-Fences), mit folgender Struktur:
+
+{
+  "Firmenname": "string oder null",
+  "Strasse": "Strassenname ohne Hausnummer, oder null",
+  "Hausnummer": "Hausnummer als string oder null",
+  "Postleitzahl": "int oder null — vierstellige Schweizer PLZ",
+  "Ort": "string oder null",
+  "AnzahlMitarbeitende": "int oder null — bei Bereichen wie '20-49' den Mittelwert (35) angeben",
+  "Umsatz": "int oder null — bei Bereichen den Mittelwert angeben",
+  "Zeichnungsberechtigte": [
+    {"Vorname": "string", "Name": "string", "Funktion": "string — z.B. VR, GL, Zeichnungsberechtigt"}
+  ],
+  "Rechtsform": "string oder null — z.B. Aktiengesellschaft",
+  "MWSTNr": "string oder null — z.B. CHE-123.456.789",
+  "Branche": "string oder null",
+  "Firmenzweck": "string oder null",
+  "ListeZweigniederlassungen": ["string — nur echte Firmennamen, keine CTAs wie 'Mehr anzeigen'"]
+}
+
+Hinweise:
+- Fehlende Felder → null bzw. []
+- Postleitzahl, AnzahlMitarbeitende, Umsatz müssen int sein (nicht string)
+- Zeichnungsberechtigte: Funktion aus Kontext ableiten (Verwaltungsrat → VR, Geschäftsleitung → GL, sonst Zeichnungsberechtigt)
+- ListeZweigniederlassungen: nur echte Firmennamen, keine Buttons/Links-Texte"""
+
+        payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": page_text}
+            ]
+        }
+        headers = {
+            "Authorization": f"Bearer {self.openrouter_key}",
+            "Content-Type": "application/json"
+        }
+        try:
+            response = requests.post(OPENROUTER_API_URL, json=payload, headers=headers, timeout=60)
+            response.raise_for_status()
+            content = response.json()["choices"][0]["message"]["content"].strip()
+            # Markdown-Fences entfernen falls vorhanden
+            if content.startswith("```"):
+                content = re.sub(r'^```[a-z]*\n?', '', content)
+                content = re.sub(r'\n?```$', '', content)
+            data = json.loads(content)
+            # Numerische Felder normalisieren
+            for field in ("AnzahlMitarbeitende", "Umsatz", "Postleitzahl"):
+                if isinstance(data.get(field), str):
+                    data[field] = self._parse_int(data[field])
+            return data
+        except Exception as e:
+            print(f"OpenRouter-Fehler: {e}", file=sys.stderr)
+            return None
+
+    async def _extract_company_details(self, url: str) -> Optional[dict]:
+        """Extrahiere Firmendetails von Detailseite via LLM."""
         print(f"Extrahiere Details von: {url}")
-        
-        # Bestehende Seite verwenden (kein neuer Tab — Session bleibt erhalten)
+
         await self.page.goto(url, wait_until='networkidle')
         await self._random_delay(1000, 1500)
-        new_page = self.page  # Alias für den restlichen Code
 
-        try:
-            data = {
-                "Firmenname": None,
-                "Strasse": None,
-                "Hausnummer": None,
-                "Postleitzahl": None,
-                "Ort": None,
-                "AnzahlMitarbeitende": None,
-                "Umsatz": None,
-                "Zeichnungsberechtigte": [],
-                "Rechtsform": None,
-                "MWSTNr": None,
-                "Branche": None,
-                "Firmenzweck": None,
-                "ListeZweigniederlassungen": []
-            }
-            
-            # Alle h4.key + Wert-Paare extrahieren.
-            # Struktur: h4.key → optional leeres div.section--small → span/p mit Wert
-            pairs = await new_page.evaluate("""() => {
-                const result = {};
-                document.querySelectorAll('h4.key').forEach(h4 => {
-                    const key = h4.textContent.trim();
-                    let sibling = h4.nextElementSibling;
-                    // Leere section--small Divs überspringen (Paywall-Platzhalter)
-                    while (sibling && sibling.classList.contains('section--small') && !sibling.textContent.trim()) {
-                        sibling = sibling.nextElementSibling;
-                    }
-                    if (sibling) result[key] = sibling.textContent.trim();
-                });
-                return result;
-            }""")
-
-            # Firmenname
-            try:
-                data["Firmenname"] = (await new_page.locator('h1').first.text_content()).strip()
-            except Exception:
-                pass
-
-            # Strukturierte Felder direkt aus h4.key/p.value
-            data["Rechtsform"] = pairs.get("Rechtsform") or None
-            data["MWSTNr"] = pairs.get("UID/MWST") or None
-            data["Branche"] = pairs.get("Branche") or None
-            data["Firmenzweck"] = pairs.get("Firmenzweck") or None
-
-            # Ort aus "Rechtssitz der Firma" (z.B. "Weiningen (ZH)" oder "8173 Neerach")
-            sitz = pairs.get("Rechtssitz der Firma", "")
-            if sitz:
-                plz_match = re.match(r'(\d{4})\s+(.+)', sitz)
-                if plz_match:
-                    data["Postleitzahl"] = plz_match.group(1)
-                    data["Ort"] = plz_match.group(2).strip()
-                else:
-                    data["Ort"] = re.sub(r'\s*\([^)]+\)', '', sitz).strip()
-
-            data["AnzahlMitarbeitende"] = self._parse_int(pairs.get("Mitarbeiter", ""))
-            data["Umsatz"] = self._parse_int(pairs.get("Umsatz in CHF", ""))
-            data["Postleitzahl"] = self._parse_int(data.get("Postleitzahl"))
-
-            # Zeichnungsberechtigte aus "neuste Zeichnungsberechtigte" (komma-getrennte Namen)
-            zb_text = pairs.get("neuste Zeichnungsberechtigte", "")
-            if zb_text:
-                for name in [n.strip() for n in zb_text.split(',') if n.strip()]:
-                    parts = name.split()
-                    if len(parts) >= 2:
-                        data["Zeichnungsberechtigte"].append({
-                            "Vorname": parts[0],
-                            "Name": ' '.join(parts[1:]),
-                            "Funktion": "Zeichnungsberechtigt"
-                        })
-
-            # Zweigniederlassungen — nur echte Firmennamen, nicht CTA-Links
-            branches = await new_page.evaluate("""() => {
-                const h2 = Array.from(document.querySelectorAll('h2')).find(h => h.textContent.includes('Zweigniederlassung'));
-                if (!h2) return [];
-                const container = h2.nextElementSibling || h2.parentElement;
-                const ignore = new Set(['Mehr erfahren', 'Jetzt kostenlos abrufen', 'Mehr anzeigen']);
-                return Array.from(container.querySelectorAll('a[href*=\"/de/company/\"]'))
-                    .map(a => a.textContent.trim())
-                    .filter(name => name.length > 3 && !ignore.has(name));
-            }""")
-            data["ListeZweigniederlassungen"] = branches
-
-            return data
-
-        except Exception as e:
-            print(f"Fehler bei Extraktion: {e}")
+        page_text = await self.page.evaluate("() => document.body.innerText")
+        data = await asyncio.to_thread(self._call_openrouter, page_text)
+        if data is None:
             return None
+
+        # Numerische Felder als Absicherung nochmals normalisieren
+        for field in ("AnzahlMitarbeitende", "Umsatz", "Postleitzahl"):
+            if isinstance(data.get(field), str):
+                data[field] = self._parse_int(data[field])
+
+        return data
 
 
 async def main():
@@ -459,16 +427,36 @@ Beispiele:
     parser.add_argument('--password', required=True, help='Passwort für Moneyhouse-Login')
     parser.add_argument('--headless', action='store_true', help='Browser im Hintergrund ausführen')
     parser.add_argument('-o', '--output', default='output.json', help='Ausgabedatei (Standard: output.json)')
-    
+    parser.add_argument('--openrouter-key', help='OpenRouter API Key (oder OPENROUTER_API_KEY env var)')
+    parser.add_argument('--model', default=DEFAULT_MODEL, help=f'OpenRouter-Modell (Standard: {DEFAULT_MODEL})')
+
     args = parser.parse_args()
-    
+
+    # .env-Datei laden (falls vorhanden)
+    env_path = Path(__file__).parent / '.env'
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith('#') and '=' in line:
+                    k, _, v = line.partition('=')
+                    os.environ.setdefault(k.strip(), v.strip())
+
+    # API-Key-Auflösung: --openrouter-key > OPENROUTER_API_KEY env var / .env
+    openrouter_key = args.openrouter_key or os.environ.get('OPENROUTER_API_KEY')
+    if not openrouter_key:
+        print("Fehler: OpenRouter API Key fehlt. Setze --openrouter-key oder OPENROUTER_API_KEY.", file=sys.stderr)
+        sys.exit(1)
+
     print(f"Moneyhouse Scraper gestartet...")
     print(f"Suchbegriff: {args.search_term}")
     print(f"Headless-Modus: {args.headless}")
     print(f"Output-Datei: {args.output}")
+    print(f"Modell: {args.model}")
     print("-" * 50)
-    
-    async with MoneyhouseScraper(args.email, args.password, args.headless) as scraper:
+
+    async with MoneyhouseScraper(args.email, args.password, args.headless,
+                                  openrouter_key=openrouter_key, model=args.model) as scraper:
         try:
             # Login
             await scraper.login()
