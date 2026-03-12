@@ -162,7 +162,7 @@ Use one of the following formats, chose whichever fits best for the data:
 - simple list
 - csv table
 
-- No prose, no markdown, no explanation.
+- No preamble, no explanation text — output only the data.
 - Do NOT summarize results — include the actual data from the tool calls
 - Do NOT ask follow-up questions — the user runs this from a script
 - Do NOT add text before or after the answer objects

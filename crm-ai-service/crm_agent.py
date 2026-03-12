@@ -3,7 +3,7 @@
 crm_agent — AI-powered CRM CLI tool.
 
 Uses an OpenRouter LLM agent with CRM tools to answer free-text questions
-about the CRM, returning results as JSON.
+about the CRM
 """
 
 import argparse
@@ -64,16 +64,6 @@ def _log_section(title):
     _log(f"\n{'─' * 60}")
     _log(f"  {title}")
     _log('─' * 60)
-
-def _strip_markdown_json(text):
-    """Strip ```json ... ``` or ``` ... ``` wrappers if present."""
-    text = text.strip()
-    if text.startswith("```"):
-        lines = text.splitlines()
-        # Remove first line (```json or ```) and last ``` line
-        inner = lines[1:-1] if lines[-1].strip() == "```" else lines[1:]
-        return "\n".join(inner).strip()
-    return text
 
 def _log_result_preview(label, result_json_str):
     """Log the first 5 lines of a JSON result."""
@@ -334,44 +324,7 @@ def run_agent(task, config, timeout_seconds, verbose, max_result_chars=MAX_RESUL
                 print(f"[agent] Final answer received. content={repr(content[:200])}", file=sys.stderr)
             _log_section("Final answer from LLM")
             _log_result_preview("Content (first 5 lines)", content)
-
-            # Try to parse content as JSON (strip markdown code fences if present)
-            try:
-                result = json.loads(_strip_markdown_json(content))
-                _log("Parsed as valid JSON.")
-                return result
-            except json.JSONDecodeError:
-                pass
-
-            # Content is prose — ask the model to reformat as JSON (one retry)
-            remaining = deadline - time.time()
-            if remaining > 5:
-                if verbose:
-                    print("[agent] Asking model to reformat answer as JSON...", file=sys.stderr)
-                _log("Content is not JSON — requesting reformat...")
-                messages.append({
-                    "role": "user",
-                    "content": (
-                        "Now output your answer as a single valid JSON object ONLY. "
-                        "No prose, no markdown, no explanation — just the JSON. "
-                        "Use {\"records\":[...]} for lists, {\"count\":N} for numbers, "
-                        "{\"answer\":\"...\"} for text answers."
-                    )
-                })
-                try:
-                    response2 = call_openrouter(messages, config, timeout=int(min(remaining, 30)), iteration=f"{iteration}r")
-                    choice2 = response2.get("choices", [{}])[0]
-                    content2 = choice2.get("message", {}).get("content") or ""
-                    _log_section("JSON reformat response")
-                    _log_result_preview("Content (first 5 lines)", content2)
-                    result = json.loads(_strip_markdown_json(content2))
-                    _log("Parsed as valid JSON.")
-                    return result
-                except json.JSONDecodeError as e:
-                    _log(f"Reformat failed (JSON parse): {e} — falling back to wrapped answer")
-                except Exception as e:
-                    _log(f"Reformat failed: {e} — falling back to wrapped answer")
-            return {"answer": content}
+            return content
 
         # Execute tool calls
         for tc in tool_calls:
@@ -405,8 +358,6 @@ Examples:
     parser.add_argument("task", help="Free-text task or question")
     parser.add_argument("--timeout", type=int, default=120, metavar="SECONDS",
                         help="Maximum time to spend (default: 120)")
-    parser.add_argument("--json", action="store_true", dest="as_json",
-                        help="Output raw JSON (always true; flag kept for compatibility)")
     parser.add_argument("--verbose", action="store_true",
                         help="Print agent progress to stderr")
     parser.add_argument("--max-chars", type=int, default=MAX_RESULT_CHARS_DEFAULT,
@@ -432,11 +383,11 @@ Examples:
         result = {"error": str(e)}
 
     _log_section("Final result")
-    _log(json.dumps(result, indent=2, ensure_ascii=False)[:2000])
+    _log(result[:2000] if isinstance(result, str) else json.dumps(result, indent=2, ensure_ascii=False)[:2000])
     _log(f"\n=== Session ended at {datetime.now().isoformat()} ===")
 
-    print(json.dumps(result, indent=2, ensure_ascii=False))
-    sys.exit(1 if "error" in result else 0)
+    print(result if isinstance(result, str) else json.dumps(result, indent=2, ensure_ascii=False))
+    sys.exit(0 if isinstance(result, str) else 1)
 
 
 if __name__ == "__main__":
