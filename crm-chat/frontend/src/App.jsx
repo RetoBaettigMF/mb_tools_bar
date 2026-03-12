@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react'
 import ReactMarkdown from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import './App.css'
 
 export default function App() {
@@ -86,7 +87,7 @@ export default function App() {
           <div key={i} className={`message ${msg.role}`}>
             <div className="bubble">
               {msg.role === 'assistant' ? (
-                <ReactMarkdown>{msg.content}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{msg.content}</ReactMarkdown>
               ) : (
                 <p>{msg.content}</p>
               )}
