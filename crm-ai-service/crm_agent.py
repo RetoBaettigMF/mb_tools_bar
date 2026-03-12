@@ -303,7 +303,7 @@ def run_agent(task, config, timeout_seconds, verbose, max_result_chars=MAX_RESUL
                         "For distinct counts, fetch the field values with pagination and count unique values yourself."
                     )
                 })
-                # Continue the loop — model will retry
+                continue  # restart loop — model will retry with feedback
             else:
                 # Transient API error — wait and retry the same messages
                 _log(f"[WARN] Transient API error — waiting 3s then retrying...")
