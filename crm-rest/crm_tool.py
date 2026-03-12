@@ -199,6 +199,10 @@ def cmd_details(base_url, session, args):
     out(crm_retrieve(base_url, session, args.id))
 
 
+def cmd_query(base_url, session, args):
+    out(crm_query(base_url, session, args.sql))
+
+
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -227,6 +231,7 @@ examples:
   crm details 4x2712
   crm details 3x12345
   crm details 13x456
+  crm query "select * from Contacts where email like '%cudos%' limit 0, 20;"
         """,
     )
 
@@ -250,6 +255,9 @@ examples:
     p = sub.add_parser("details", help="Full details of any CRM object by ID")
     p.add_argument("id", help="CRM object ID (e.g. 4x2712, 3x123, 13x456)")
 
+    p = sub.add_parser("query", help="Run a raw SQL-like query against the CRM")
+    p.add_argument("sql", help="SQL-like query string (e.g. \"select * from Contacts where ...;\")")
+
     args = parser.parse_args()
 
     try:
@@ -265,6 +273,7 @@ examples:
             "search-comments":   cmd_search_comments,
             "account-comments":  cmd_account_comments,
             "details":           cmd_details,
+            "query":             cmd_query,
         }
         dispatch[args.command](base_url, session, args)
     except SystemExit:
