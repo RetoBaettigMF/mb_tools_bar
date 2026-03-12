@@ -284,26 +284,47 @@ def run_agent(task, config, timeout_seconds, verbose, max_result_chars=MAX_RESUL
         finish_reason = choice.get("finish_reason")
         if finish_reason == "error":
             error_detail = message.get("content") or str(response.get("error", "unknown error"))
-            _log(f"[WARN] LLM returned finish_reason=error: {repr(error_detail[:80])} — retrying once")
-            # Pop the failed message and retry
+            raw_error = json.dumps(response, ensure_ascii=False)[:400]
+            native_reason = choice.get("native_finish_reason", "")
+            _log(f"[WARN] LLM finish_reason=error (native: {native_reason}): {repr(error_detail[:80])}")
+            _log(f"[WARN] Raw response: {raw_error}")
+            # Pop the failed message
             messages.pop()
-            remaining = deadline - time.time()
-            if remaining > 5:
-                try:
-                    response = call_openrouter(messages, config, timeout=int(min(remaining, 60)), iteration=f"{iteration}e")
-                    choice = response.get("choices", [{}])[0]
-                    message = choice.get("message", {})
-                    messages.append(message)
-                    finish_reason = choice.get("finish_reason")
-                    if finish_reason == "error":
-                        error_detail = message.get("content") or str(response.get("error", "unknown error"))
-                        _log(f"[ERROR] Retry also failed: {repr(error_detail[:80])}")
-                        return {"error": f"LLM error: {error_detail}"}
-                except Exception as e:
-                    _log(f"[ERROR] Retry failed: {e}")
-                    return {"error": f"LLM error after retry: {e}"}
+
+            if "MALFORMED_FUNCTION" in native_reason:
+                # Model generated an invalid tool call — tell it what went wrong and let it retry
+                _log("[WARN] Malformed function call — injecting error feedback and continuing")
+                messages.append({
+                    "role": "user",
+                    "content": (
+                        "Your last function call was malformed and could not be executed. "
+                        "Please try again with a valid crm_query or crm_retrieve call. "
+                        "Remember: COUNT(DISTINCT ...), GROUP BY, JOIN, and subqueries are NOT supported. "
+                        "For distinct counts, fetch the field values with pagination and count unique values yourself."
+                    )
+                })
+                # Continue the loop — model will retry
             else:
-                return {"error": f"LLM error: {error_detail}"}
+                # Transient API error — wait and retry the same messages
+                _log(f"[WARN] Transient API error — waiting 3s then retrying...")
+                time.sleep(3)
+                remaining = deadline - time.time()
+                if remaining > 5:
+                    try:
+                        response = call_openrouter(messages, config, timeout=int(min(remaining, 60)), iteration=f"{iteration}e")
+                        choice = response.get("choices", [{}])[0]
+                        message = choice.get("message", {})
+                        messages.append(message)
+                        finish_reason = choice.get("finish_reason")
+                        if finish_reason == "error":
+                            error_detail = message.get("content") or str(response.get("error", "unknown error"))
+                            _log(f"[ERROR] Retry also failed: {repr(error_detail[:80])}")
+                            return {"error": f"LLM error: {error_detail}"}
+                    except Exception as e:
+                        _log(f"[ERROR] Retry failed: {e}")
+                        return {"error": f"LLM error after retry: {e}"}
+                else:
+                    return {"error": f"LLM error: {error_detail}"}
 
         tool_calls = message.get("tool_calls")
         if not tool_calls:
