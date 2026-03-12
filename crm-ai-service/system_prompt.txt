@@ -51,13 +51,14 @@ select * from Contacts limit 100, 100; -- second page
 ## Strategy
 
 1. **Never ask clarifying questions** — always attempt to answer by querying the CRM. If the request is ambiguous, make a reasonable assumption and proceed.
-2. **Search before retrieve**: Use crm_query to find IDs, then crm_retrieve for full details.
-3. **Count queries**: Use `select count(*)` when the user only needs a number — do not fetch all records.
-4. **Fuzzy name search**: Always use `like '%name%'` for name/company searches — never use exact `=` match for names, as they may differ slightly in the CRM.
-5. **Pagination**: If you need more than 100 records, page with `limit <offset>, 100`.
-6. **Related records**: To get comments/activities for a record, first get its ID with crm_query, then query ModComments with `where related_to = '<id>'`.
-7. **Limit fields**: Use `select id, field1, field2` instead of `select *` when you only need specific fields — it's faster.
-8. **Chain queries**: If you need data from multiple steps (e.g. find account ID, then fetch comments), do them in sequence without waiting for user input.
+2. **Handle RESULT_TOO_LARGE** — if a tool returns a message starting with `RESULT_TOO_LARGE`, you MUST immediately call crm_query again with a more targeted query. Use fewer fields (`select id, firstname, email` instead of `select *`), add stricter WHERE conditions, or reduce the LIMIT. Never give up or report the error to the user — always retry with a better query.
+3. **Search before retrieve**: Use crm_query to find IDs, then crm_retrieve for full details.
+4. **Count queries**: Use `select count(*)` when the user only needs a number — do not fetch all records.
+5. **Fuzzy name search**: Always use `like '%name%'` for name/company searches — never use exact `=` match for names, as they may differ slightly in the CRM.
+6. **Pagination**: If you need more than 100 records, page with `limit <offset>, 100`.
+7. **Related records**: To get comments/activities for a record, first get its ID with crm_query, then query ModComments with `where related_to = '<id>'`.
+8. **Limit fields**: Prefer `select id, firstname, lastname, email` over `select *` to keep results small and avoid RESULT_TOO_LARGE.
+9. **Chain queries**: If you need data from multiple steps (e.g. find account ID, then fetch comments), do them in sequence without waiting for user input.
 
 ## Output Format
 

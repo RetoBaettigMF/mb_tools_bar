@@ -18,6 +18,8 @@ from pathlib import Path
 
 from crm_api import crm_login, crm_query, crm_retrieve
 
+MAX_RESULT_CHARS_DEFAULT = 50_000
+
 
 # ---------------------------------------------------------------------------
 # Config
@@ -170,7 +172,7 @@ def call_openrouter(messages, config, timeout, iteration):
 # Tool dispatch
 # ---------------------------------------------------------------------------
 
-def dispatch_tool(tool_call, base_url, session, verbose):
+def dispatch_tool(tool_call, base_url, session, verbose, max_result_chars):
     """Execute a tool call and return the result as a JSON string."""
     name = tool_call["function"]["name"]
     try:
@@ -203,14 +205,32 @@ def dispatch_tool(tool_call, base_url, session, verbose):
     _log(f"CRM response in {elapsed:.2f}s — {record_count} record(s)")
     _log_result_preview("Result preview (first 5 lines)", result_str)
 
-    return json.dumps(result, ensure_ascii=False)
+    # Check character limit
+    full_str = json.dumps(result, ensure_ascii=False)
+    if len(full_str) > max_result_chars:
+        sample = result[:5] if isinstance(result, list) else result
+        sample_str = json.dumps(sample, ensure_ascii=False)
+        warning = (
+            f"RESULT_TOO_LARGE: The API returned {len(full_str):,} characters "
+            f"(limit is {max_result_chars:,}). "
+            f"You MUST call crm_query again with a more specific query — "
+            f"use stricter WHERE conditions, select only needed fields (not *), "
+            f"or reduce the LIMIT. Do NOT give up or ask the user to refine — retry yourself. "
+            f"Here are the first 5 records to show the data structure: {sample_str}"
+        )
+        _log(f"[LIMIT] Result truncated: {len(full_str):,} chars > {max_result_chars:,} limit — returned sample of {len(sample) if isinstance(sample, list) else 1} record(s)")
+        if verbose:
+            print(f"  [limit] Result too large ({len(full_str):,} chars), sending sample to AI", file=sys.stderr)
+        return warning
+
+    return full_str
 
 
 # ---------------------------------------------------------------------------
 # Agent loop
 # ---------------------------------------------------------------------------
 
-def run_agent(task, config, timeout_seconds, verbose):
+def run_agent(task, config, timeout_seconds, verbose, max_result_chars=MAX_RESULT_CHARS_DEFAULT):
     """Run the agentic loop. Returns a dict (the final answer or an error)."""
     deadline = time.time() + timeout_seconds
 
@@ -218,6 +238,7 @@ def run_agent(task, config, timeout_seconds, verbose):
     _log(f"Task: {task}")
     _log(f"Timeout: {timeout_seconds}s")
     _log(f"Model: {config['OPENROUTER_MODEL']}")
+    _log(f"Max result chars: {max_result_chars:,}")
 
     # Load system prompt
     prompt_file = Path(__file__).parent / "system_prompt.txt"
@@ -333,7 +354,7 @@ def run_agent(task, config, timeout_seconds, verbose):
 
         # Execute tool calls
         for tc in tool_calls:
-            tool_result = dispatch_tool(tc, config["CRM_URL"], session, verbose)
+            tool_result = dispatch_tool(tc, config["CRM_URL"], session, verbose, max_result_chars)
             messages.append({
                 "role": "tool",
                 "tool_call_id": tc["id"],
@@ -367,6 +388,9 @@ Examples:
                         help="Output raw JSON (always true; flag kept for compatibility)")
     parser.add_argument("--verbose", action="store_true",
                         help="Print agent progress to stderr")
+    parser.add_argument("--max-chars", type=int, default=MAX_RESULT_CHARS_DEFAULT,
+                        metavar="N",
+                        help=f"Max characters per CRM result before asking AI to filter (default: {MAX_RESULT_CHARS_DEFAULT:,})")
 
     args = parser.parse_args()
 
@@ -382,7 +406,7 @@ Examples:
     _log(f"Task: {args.task}")
 
     try:
-        result = run_agent(args.task, config, args.timeout, args.verbose)
+        result = run_agent(args.task, config, args.timeout, args.verbose, args.max_chars)
     except Exception as e:
         result = {"error": str(e)}
 
