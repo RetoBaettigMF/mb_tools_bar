@@ -4,7 +4,7 @@ Answer free-text questions about the CRM using an AI agent that queries the CRM 
 
 ## Overview
 
-`crm-ai` takes a natural-language task, runs an agentic loop using an OpenRouter LLM, and returns the answer as JSON. The agent can issue multiple CRM queries across several turns to resolve complex questions.
+`crm-ai` takes a natural-language task, runs an agentic loop using an OpenRouter LLM, and returns the answer in a machine-readable format. The agent can issue multiple CRM queries across several turns to resolve complex questions.
 
 ## Setup
 
@@ -31,23 +31,30 @@ crm-ai "Find all contacts at cudos.ch"
 # With timeout
 crm-ai "List all open potentials" --timeout 60
 
+# Limit result size (default: 50,000 chars)
+crm-ai "Find open potentials" --max-chars 10000
+
 # Verbose (shows agent progress on stderr)
 crm-ai "Find contacts named Müller" --verbose
-
-# Pipe to json.tool for formatting
-crm-ai "Find contacts at cudos.ch" | python3 -m json.tool
 ```
 
 ## Output Format
 
-Always outputs a single JSON object to stdout:
+The agent picks the most appropriate format for the data:
 
+- **Markdown table** — for lists of records
+- **JSON object** — for structured/nested data
+- **Simple list** — for short enumerations
+- **CSV table** — for tabular data meant for further processing
+
+Custom field names (e.g. `cf_958`) and user IDs (e.g. `19x7`) are resolved to their real names using built-in lookup tables in the system prompt.
+
+On error (exit code 1):
 ```json
-{"records": [...]}       // list of records
-{"record": {...}}        // single record
-{"count": 42}            // numeric result
-{"error": "reason"}      // on failure (exit code 1)
+{"error": "reason"}
 ```
+
+A detailed run log is written to `crm_agent.log` on every run (overwritten each time).
 
 ## Options
 
@@ -55,6 +62,7 @@ Always outputs a single JSON object to stdout:
 |--------|---------|-------------|
 | `task` | (required) | Free-text question or task |
 | `--timeout SECONDS` | 120 | Max time before giving up |
+| `--max-chars N` | 50000 | Max characters per CRM result; triggers AI re-query if exceeded |
 | `--verbose` | off | Print agent progress to stderr |
 
 ## Configuration
@@ -67,7 +75,7 @@ All config is read from `.env` (in the same directory) or environment variables:
 | `CRM_USER` | CRM username |
 | `CRM_API_KEY` | CRM API key |
 | `OPENROUTER_API_KEY` | OpenRouter API key |
-| `OPENROUTER_MODEL` | Model to use (e.g. `anthropic/claude-sonnet-4-6`) |
+| `OPENROUTER_MODEL` | Model to use (e.g. `google/gemini-2.5-flash-lite`) |
 
 ## Dependencies
 
