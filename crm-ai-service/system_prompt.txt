@@ -109,18 +109,19 @@ gestorben: Geschlossenes Potential, wurde nicht durchgeführt oder intern realis
 "cf_989": Projektnummer
 
 ### custom field lookup Table für Organisationen
-"cf_615": Klassifizierung Softwareentwicklung und -testing
-"cf_632": Klassifizierung Prüfsysteme
+"cf_615": Klassifizierung Softwareentwicklung und -testing ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
+"cf_632": Klassifizierung Prüfsysteme ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
 "cf_644": Umsatz (MIO CHF)
-"cf_654": Klassifizierung Cudos Trail
+"cf_654": Klassifizierung Cudos Trail ["1 - Kunde"|"2 - ex Kunde"|"3 - Potentieller Kunde"|"4 - Kein Interesse"|"5 - Keine SW/Kein Potential"|"6 - Falscher Zeitpunkt / Falsche Person"|"0 - abklären"|NULL]
 "cf_655": Distanz ZH (km)
 "cf_669": Zeichnungsberechtigte
 "cf_670": Verwaltungsrat
 "cf_671": Unternehmenszweck
-"cf_940": Klassifizierung IoT / Cloud
-"cf_973": Kundenart
-"cf_981": EKlassifizierung Data und AI
+"cf_940": Klassifizierung IoT / Cloud ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
+"cf_973": Kundenart ["ohne"|"produzierende Kunden"|"nicht-produzierende Kunden"|NULL]
+"cf_981": EKlassifizierung Data und AI ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
 "cf_983": Distanz Chur (km)
+
 
 ### custom field lookup Table für Personen
 "cf_544": "Anrede",
@@ -148,6 +149,20 @@ gestorben: Geschlossenes Potential, wurde nicht durchgeführt oder intern realis
 "cf_995": NewsletterEventsSeminare
 "cf_997": NewsletterNews
 "cf_999": NewsletterCudosTrail
+
+### How to handle classification questions
+If I ask for customers with high potentials, for Customers with "Regelmässig Nachfassen" or similar questions, look in the following fields with the predefined classifications.
+Take the best matching options for your searches. Do not try to find distinct classifications via the sql queries.
+
+"cf_615": Klassifizierung Softwareentwicklung und -testing ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
+"cf_632": Klassifizierung Prüfsysteme ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
+"cf_654": Klassifizierung Cudos Trail ["1 - Kunde"|"2 - ex Kunde"|"3 - Potentieller Kunde"|"4 - Kein Interesse"|"5 - Keine SW/Kein Potential"|"6 - Falscher Zeitpunkt / Falsche Person"|"0 - abklären"|NULL]
+"cf_940": Klassifizierung IoT / Cloud ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
+"cf_981": EKlassifizierung Data und AI ["1 - High Potential"|"2 - Regelmässig Nachfassen"|"3 - Wenig Potential"|"4 - Kein Potential"|"0 - abklären"|NULL]
+"accounttype": Kunden Typ ["Kunde"|"potentieller Kunde"|"Partner"|"Freelancer"|"Mitbewerber"|"Presse"|"Lieferant"|"Personalvermittler"|"andere"]
+"cf_973": Kundenart ["ohne"|"produzierende Kunden"|"nicht-produzierende Kunden"|NULL]
+"cf_587": PotentialArt ( ["Software Engineering"|"Prüfsystem"|"IIoT"|"AI (Künstliche Intelligenz)"|"Cudos Trail"] )
+"cf_956": Verkaufskanal (["Kundenpflege"|"Pflege des persönlichen Netzwerks"|"Google/Online-Suche"|"Newsletter / E-Mail-Marketing" | "Seminar / Events intern" | "Messe / Events / Vorträge extern" |"Partnerschaft / Verband" |"Pers. Empfehlung" |"Linkedin" |"Ausschreibung / Simap"])
 
 
 ## Output Format
