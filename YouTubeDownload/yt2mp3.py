@@ -9,6 +9,7 @@ def download_as_mp3(url: str, output_dir: str = ".") -> None:
     ydl_opts = {
         "format": "bestaudio/best",
         "outtmpl": f"{output_dir}/%(title)s.%(ext)s",
+        "noplaylist": True,
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
