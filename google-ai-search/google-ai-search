@@ -9,6 +9,7 @@ import argparse
 import sys
 import json
 import os
+import urllib.request
 from pathlib import Path
 
 try:
@@ -68,6 +69,23 @@ def print_warning(msg):
 
 def print_info(msg):
     print(f"{Colors.CYAN}ℹ️  {msg}{Colors.RESET}", file=sys.stderr)
+
+
+def resolve_redirect(uri):
+    """Folgt einem Redirect und gibt die finale URL zurück."""
+    if "vertexaisearch.cloud.google.com" not in uri:
+        return uri
+    try:
+        req = urllib.request.Request(uri, method="HEAD", headers={"User-Agent": "Mozilla/5.0"})
+        with urllib.request.urlopen(req, timeout=5) as resp:
+            return resp.url
+    except Exception:
+        try:
+            req = urllib.request.Request(uri, headers={"User-Agent": "Mozilla/5.0"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                return resp.url
+        except Exception:
+            return uri
 
 
 def add_citations(response, chunks):
@@ -135,14 +153,34 @@ def search(query, model=None, json_output=False, raw=False, timeout=30):
             for chunk in chunks:
                 if chunk.web and chunk.web.uri not in seen:
                     seen.add(chunk.web.uri)
+                    resolved_uri = resolve_redirect(chunk.web.uri)
                     sources.append({
                         "title": chunk.web.title or "",
-                        "uri": chunk.web.uri,
+                        "uri": resolved_uri,
+                        "original_uri": chunk.web.uri,
                     })
+
+        # Chunks mit resolvierten URIs für Inline-Zitierungen
+        resolved_chunks = []
+        for chunk in chunks:
+            if chunk.web:
+                resolved_uri = next(
+                    (s["uri"] for s in sources if s["original_uri"] == chunk.web.uri),
+                    chunk.web.uri
+                )
+                # Wrapper-Objekt simulieren
+                class ResolvedChunk:
+                    class web:
+                        pass
+                rc = ResolvedChunk()
+                rc.web = type("web", (), {"uri": resolved_uri, "title": chunk.web.title})()
+                resolved_chunks.append(rc)
+            else:
+                resolved_chunks.append(chunk)
 
         # Text mit Inline-Zitierungen
         try:
-            summary = add_citations(response, chunks)
+            summary = add_citations(response, resolved_chunks)
         except Exception:
             summary = response.text
 
@@ -152,7 +190,7 @@ def search(query, model=None, json_output=False, raw=False, timeout=30):
                 "query": query,
                 "model": model,
                 "response": summary,
-                "sources": sources,
+                "sources": [{"title": s["title"], "uri": s["uri"]} for s in sources],
             }
             print(json.dumps(output, indent=2, ensure_ascii=False))
         elif raw:
