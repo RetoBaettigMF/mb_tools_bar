@@ -1,0 +1,2 @@
+[✓ OK] /home/reto/.openclaw/workspace/TOOLS.md
+[✓ OK] /home/reto/.openclaw/workspace/memory/2026-03-15.md

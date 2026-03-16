@@ -432,8 +432,10 @@ Beispiele:
 
     args = parser.parse_args()
 
-    # .env-Datei laden (falls vorhanden)
-    env_path = Path(__file__).parent / '.env'
+    # .env-Datei laden: zuerst Parent-Verzeichnis, dann lokales Verzeichnis
+    env_path = Path(__file__).parent.parent / '.env'
+    if not env_path.exists():
+        env_path = Path(__file__).parent / '.env'
     if env_path.exists():
         with open(env_path) as f:
             for line in f:

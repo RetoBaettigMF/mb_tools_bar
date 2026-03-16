@@ -7,6 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **openclaw_toolbox** (formerly mb_tools_bar) is a collection of CLI tools for Cudos/moltbot internal systems:
 - **Cudos Controlling CLI**: Command-line tool for querying RolX (timesheet) and Bexio (invoicing) via natural language
 - **SalesReminderTool**: Automated email reminder for sales potential updates
+- **SecurityScan**: CLI tool to recursively scan Markdown files for potentially unsafe/malicious content via AI
 
 ## Repository Structure
 
@@ -19,8 +20,12 @@ openclaw_toolbox/
 ├── SalesReminderTool/
 │   ├── sales_reminder.py          # CLI tool
 │   └── README.md                   # Tool-specific docs
+├── SecurityScan/
+│   ├── security_scan.py           # CLI tool
+│   └── Requirements.md            # Tool requirements
 ├── cudos-controlling               # Symlink → CudosControllingTool/cudos_controlling.py
 ├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
+├── security-scan                   # Symlink → SecurityScan/security_scan.py
 ├── requirements.txt               # All dependencies
 ├── setup_venv.sh                  # Virtual environment setup
 ├── README.md                      # Main documentation
