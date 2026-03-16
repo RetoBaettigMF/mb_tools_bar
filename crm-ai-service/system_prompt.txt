@@ -78,12 +78,19 @@ select * from Contacts limit 100, 100; -- second page
 19x17735: Marianne Petitpierre
 19x17734: Public
 
-### sales_stage Lookup Table (Stufe im Sales-Prozess)
+### cf_964 Lookup Table :Stufe im Sales-Prozess
 (empty): Offenes Potential, aktives Potential, nicht abgeschlossenes Potential
 inaktiv: Geschlossenes, inaktives Potential, könnte wieder mal angeschaut werden
 gewonnen: Geschlossenes, gewonnenes Potential
 verloren: Geschlossenes, verlorenes Potential (an Konurrenz verloren)
 gestorben: Geschlossenes Potential, wurde nicht durchgeführt oder intern realisiert
+
+### sales_stage auswahlfeld
+Das Feld sales_stage kann folgende Zustände annehmen$
+Closed Lost
+Closed Won
+gestorben
+inaktiv
 
 ### custom field lookup Table für Potentiale
 "cf_1004": BetragExtern
