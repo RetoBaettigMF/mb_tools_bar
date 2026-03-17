@@ -40,7 +40,7 @@ check_root() {
 }
 
 check_env() {
-    ENV_FILE="${SCRIPT_DIR}/../.env"
+    ENV_FILE="$(realpath "${SCRIPT_DIR}/../.env")"
     if [[ ! -f "$ENV_FILE" ]]; then
         log_error ".env Datei nicht gefunden: $ENV_FILE"
         echo "Bitte zuerst .env aus .env.example erstellen:"
@@ -62,7 +62,7 @@ install_service() {
     log_info "Installiere gmail-trigger Service..."
     
     # Virtual Environment im Parent-Verzeichnis verwenden
-    VENV_PATH="${SCRIPT_DIR}/../venv"
+    VENV_PATH="$(realpath "${SCRIPT_DIR}/../venv")"
     if [[ ! -d "$VENV_PATH" ]]; then
         log_error "Virtual Environment nicht gefunden: $VENV_PATH"
         echo "Bitte zuerst das venv im Parent-Verzeichnis erstellen:"
@@ -72,7 +72,7 @@ install_service() {
 
     # Requirements installieren
     log_info "Installiere Python Dependencies..."
-    "$VENV_PATH/bin/pip" install -q -r "${SCRIPT_DIR}/../requirements.txt"
+    "$VENV_PATH/bin/pip" install -q -r "$(realpath "${SCRIPT_DIR}/../requirements.txt")"
     
     # Service Datei erstellen
     cat > "$SERVICE_FILE" << EOF
@@ -86,7 +86,8 @@ Type=simple
 User=${USER}
 WorkingDirectory=${SCRIPT_DIR}
 Environment=PYTHONUNBUFFERED=1
-EnvironmentFile=${SCRIPT_DIR}/../.env
+Environment=PATH=/home/${USER}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+EnvironmentFile=$(realpath "${SCRIPT_DIR}/../.env")
 ExecStart=${VENV_PATH}/bin/python ${SCRIPT_DIR}/gmail_trigger.py
 Restart=always
 RestartSec=10
