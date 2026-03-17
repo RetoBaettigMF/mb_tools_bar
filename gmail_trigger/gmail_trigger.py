@@ -11,6 +11,7 @@ Verwendung:
 
 import imaplib
 import ssl
+import socket
 import subprocess
 import time
 import logging
@@ -89,27 +90,17 @@ def notify_openclaw(subject, sender, message_id, label):
     text = f"{emoji} Neue Email in [{label}] von {sender}: {short_subject}. Bitte verarbeite sie jetzt gemäss prompts/AnswerEmails.md. Schreibe kurz auf meinen Telegram-Kanal, was läuft."
     
     try:
-        result = subprocess.run(
-            ["openclaw", "agent", "--agent", Config.OPENCLAW_SESSION, "--message", text],
-            check=True,
-            capture_output=True,
-            text=True,
-            timeout=120
+        subprocess.Popen(
+            ["openclaw", "agent", "--agent", Config.OPENCLAW_SESSION, "--message", text]
         )
         logger.info(f"Benachrichtigt: {short_subject}")
-        
-        # Als verarbeitet markieren
         processed.add(message_id)
         save_processed_ids(processed)
         return True
-        
-    except subprocess.TimeoutExpired:
-        logger.error("Timeout beim Senden an OpenClaw")
-    except subprocess.CalledProcessError as e:
-        logger.error(f"OpenClaw Fehler: {e.stderr}")
+
     except Exception as e:
         logger.error(f"Fehler beim Benachrichtigen: {e}")
-    
+
     return False
 
 
@@ -216,30 +207,38 @@ def connect_imap():
 def idle_mode(mail, label):
     """Führt IDLE für ein Label durch"""
     try:
-        mail.select(label)
+        status, data = mail.select(label)
         logger.info(f"IDLE Modus für {label}")
-        
+
+        # Socket timeout gegen ewiges Hängen (Gmail schliesst TCP manchmal still)
+        mail.sock.settimeout(30)
+
         # IDLE starten
-        tag = mail._new_tag()  # gibt bytes zurück, z.B. b'IMAPX1'
+        tag = mail._new_tag()
         mail.send(tag + b" IDLE\r\n")
 
-        # Auf Response warten
         tag_str = tag.decode('ascii')
-        while True:
+        deadline = time.time() + Config.IDLE_TIMEOUT
+        while time.time() < deadline:
             try:
                 line = mail.readline().decode('utf-8', errors='ignore')
                 if line.startswith('*'):
-                    # Server hat etwas zu sagen
                     if 'EXISTS' in line or 'RECENT' in line:
                         logger.info(f"IDLE Event in {label}: {line.strip()}")
+                        mail.send(b"DONE\r\n")
+                        time.sleep(0.5)
                         return True
                 elif line.startswith(tag_str):
-                    # IDLE beendet
                     return False
+            except socket.timeout:
+                continue  # Kein Event, weiterwarten
             except Exception as e:
                 logger.error(f"IDLE Fehler: {e}")
                 return False
-                
+
+        mail.send(b"DONE\r\n")
+        return False
+
     except Exception as e:
         logger.error(f"IDLE Setup Fehler: {e}")
         return False
@@ -312,7 +311,6 @@ def run_daemon():
             while time.time() - idle_start < Config.IDLE_TIMEOUT:
                 if idle_mode(mail, primary_label):
                     # Neues Event - prüfen
-                    stop_idle(mail)
                     time.sleep(2)  # Kurz warten bis Mail vollständig
                     check_mailbox(mail, primary_label)
                     # IDLE neu starten

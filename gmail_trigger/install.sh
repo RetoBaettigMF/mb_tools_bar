@@ -74,6 +74,13 @@ install_service() {
     log_info "Installiere Python Dependencies..."
     "$VENV_PATH/bin/pip" install -q -r "$(realpath "${SCRIPT_DIR}/../requirements.txt")"
     
+    # PATH zusammenbauen inkl. Linuxbrew (für openclaw)
+    SERVICE_PATH="/home/${USER}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
+    if [[ -d "/home/linuxbrew/.linuxbrew/bin" ]]; then
+        SERVICE_PATH="/home/linuxbrew/.linuxbrew/bin:${SERVICE_PATH}"
+        log_info "Linuxbrew gefunden - wird in PATH aufgenommen"
+    fi
+
     # Service Datei erstellen
     cat > "$SERVICE_FILE" << EOF
 [Unit]
@@ -86,7 +93,7 @@ Type=simple
 User=${USER}
 WorkingDirectory=${SCRIPT_DIR}
 Environment=PYTHONUNBUFFERED=1
-Environment=PATH=/home/${USER}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=${SERVICE_PATH}
 Environment=XDG_RUNTIME_DIR=/run/user/$(id -u ${USER})
 EnvironmentFile=$(realpath "${SCRIPT_DIR}/../.env")
 ExecStart=${VENV_PATH}/bin/python ${SCRIPT_DIR}/gmail_trigger.py
