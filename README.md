@@ -6,11 +6,9 @@ Collection of CLI Tools for Cudos internal systems, designed for use with OpenCl
 
 ### 1. Setup Environment Variables
 
-Copy the example environment file and add your secrets:
-
 ```bash
 cp .env.example .env
-# Edit .env and add your MBTOOLS_API_KEY
+# Edit .env and add your keys (MBTOOLS_API_KEY, CRM_URL, CRM_USER, CRM_API_KEY, OPENROUTER_API_KEY, etc.)
 ```
 
 ### 2. Setup Virtual Environment
@@ -20,187 +18,236 @@ bash setup_venv.sh
 source venv/bin/activate
 ```
 
-### 3. Configure Tools
-
-Each tool has its own setup requirements. See individual tool READMEs for details.
-
 ## Tools Overview
 
-### 🛠️ CLI Tools
+---
 
-#### [NZZ Reader](./nzz-reader/README.md)
+### [Cudos Controlling CLI](./CudosControllingTool/README.md)
 
-Liest NZZ-Artikel aus dem lokalen Scraping-Archiv.
-
-**Features:**
-- Liste der neuesten Artikel anzeigen
-- Vollständige Artikel-Texte lesen
-- Direkt aus der Kommandozeile nutzbar
+Query RolX (timesheet) and Bexio (invoicing) via natural language.
 
 **Usage:**
 ```bash
-# Zeige die neuesten 10 Artikel
-./nzz-reader
-
-# Zeige den vollständigen Text eines Artikels (z.B. Artikel #3)
-./nzz-reader 3
-```
-
-#### [Google AI Search](./google-ai-search/README.md)
-
-Kommandozeilen-Tool für Google Search AI via Gemini API.
-
-**Features:**
-- 🔍 Natürlichsprachige Suche mit Google Search AI
-- 📚 Quellen werden automatisch zitiert
-- 🎯 Direkt in der Shell nutzbar
-- 📦 JSON-Output für Weiterverarbeitung
-- 💬 Interaktiver Modus verfügbar
-
-**Setup:**
-```bash
-# API Key in config.json hinterlegen
-# ODER: GEMINI_API_KEY als Umgebungsvariable setzen
-```
-
-**Usage:**
-```bash
-# Einfache Suche
-./google-ai-search "Aktueller Stand von Fusion Energy"
-
-# JSON-Output
-./google-ai-search --json "Wetter in Zürich morgen"
-
-# Bestimmtes Modell verwenden
-./google-ai-search --model gemini-1.5-pro "Python 3.12 neue Features"
-
-# Interaktiver Modus
-./google-ai-search -i
-```
-
-#### [Cudos Controlling CLI](./CudosControllingTool/README.md)
-
-Query RolX (timesheet) and Bexio (invoicing) via natural language from the command line.
-
-**Features:**
-- `rolx` subcommand - Query timesheet data
-- `bexio` subcommand - Query invoice data
-- Natural language queries in English or German
-- JSON mode for scripting
-
-**Setup:**
-```bash
-# Set API key (either in .env file or export)
-echo 'MBTOOLS_API_KEY=your-key' >> .env
-# Or: export MBTOOLS_API_KEY="your-key"
-```
-
-**Usage:**
-```bash
-# RolX timesheet queries
+# Timesheet queries (RolX)
 ./cudos-controlling rolx "How many hours did Reto Bättig work in 2025 per task"
-./cudos-controlling rolx "Wie viele Stunden hat Reto gearbeitet?" --json
+./cudos-controlling rolx "Gib mir alle Stunden für Projekt #0123.002 im Februar 2026"
 
-# Bexio invoicing queries
+# Invoice queries (Bexio)
 ./cudos-controlling bexio "Give me invoice #0290.001.01.01"
 ./cudos-controlling bexio "Show all invoices for project 290" --json
 ```
 
-#### [SalesReminderTool](./SalesReminderTool/README.md)
+**Setup:** Set `MBTOOLS_API_KEY` in `.env` or as environment variable.
+
+---
+
+### [CRM REST CLI](./crm-rest/README.md)
+
+Direct queries against berliCRM via REST API. All output is JSON.
+
+**Usage:**
+```bash
+crm search-contacts "Max Muster"
+crm search-accounts "Cudos"
+crm search-potentials "Cloud Migration"
+crm account-comments "Cudos AG"
+crm details 3x12345
+crm query "select * from Potentials where sales_stage != 'Closed Won' limit 0, 50;"
+```
+
+**Setup:** Set `CRM_URL`, `CRM_USER`, `CRM_API_KEY` in `crm-rest/.env`.
+
+---
+
+### [CRM AI Service](./crm-ai-service/README.md)
+
+AI-powered CRM agent for complex, multi-step free-text queries. Slower and costlier than `crm` — use for complex questions.
+
+**Usage:**
+```bash
+crm-ai "Show the last 3 comments for Cudos AG"
+crm-ai "Find all contacts at cudos.ch"
+crm-ai "List all open potentials" --timeout 60
+crm-ai "Find contacts named Müller" --verbose
+```
+
+**Setup:** Set `CRM_URL`, `CRM_USER`, `CRM_API_KEY`, `OPENROUTER_API_KEY` (and optionally `OPENROUTER_MODEL`) in `crm-ai-service/.env`.
+
+---
+
+### [CRM Chat](./crm-chat/README.md)
+
+Web chat UI on top of the CRM AI agent. Ask natural-language questions about the CRM in a browser.
+
+**Setup & Start:**
+```bash
+# Backend
+cd crm-chat/backend && pip install -r requirements.txt
+uvicorn main:app --reload
+
+# Frontend (separate terminal)
+cd crm-chat/frontend && npm install && npm run dev
+```
+
+Open http://localhost:5173. Reads CRM credentials from `crm-ai-service/.env`.
+
+---
+
+### [Sales Report](./sales_report/)
+
+Creates a sales report from CRM open potentials and writes results to a Google Sheet (tabs «Summen» and «Anzahl»).
+
+**Usage:**
+```bash
+./sales_report/sales_report.py
+```
+
+No arguments — reads CRM via `crm` CLI and writes to the configured Google Sheet.
+
+---
+
+### [Sales Reminder Tool](./SalesReminderTool/README.md)
 
 Automated email reminder sent on the Wednesday before the 4th Monday of each month.
 
-**Setup:**
+**Usage:**
 ```bash
-# Add to crontab
-crontab -e
-# Add: 0 9 * * 3 python3 /path/to/sales-reminder bu@cudos.ch
+# Manual run
+python3 sales-reminder bu@cudos.ch
+
+# Cron (every Wednesday at 09:00)
+0 9 * * 3 cd /path/to/mb_tools_bar && python3 sales-reminder bu@cudos.ch
 ```
 
-**Manual usage:**
+---
+
+### [NZZ Reader](./nzz-reader/)
+
+Read NZZ articles from the local scraping archive.
+
+**Usage:**
 ```bash
-python3 sales-reminder recipient@example.com
+# Latest 10 articles
+./nzz-reader/nzz-reader.py
+
+# All articles for a specific date
+./nzz-reader/nzz-reader.py --date 2026-03-15
+
+# Full text of article #12 on that date
+./nzz-reader/nzz-reader.py --date 2026-03-15 12
 ```
+
+---
+
+### [Google AI Search](./google-ai-search/README.md)
+
+Web search powered by Google Custom Search API + Gemini for AI-summarized results with source URLs.
+
+**Usage:**
+```bash
+./google-ai-search/google-ai-search "Aktueller Stand von Fusion Energy"
+./google-ai-search/google-ai-search --json "Wetter Zürich morgen"
+./google-ai-search/google-ai-search -n 10 "Python 3.12 Features"
+./google-ai-search/google-ai-search -i    # Interactive mode
+```
+
+**Setup:** Set `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in environment or `google-ai-search/config.json`.
+
+---
+
+### [Moneyhouse Scraper](./moneyhouse-scraper/README.md)
+
+Scrapes company information from moneyhouse.ch (Handelsregister, employee count, authorized signatories, etc.).
+
+**Usage:**
+```bash
+./moneyhouse-scraper/moneyhouse_scraper.py "Cudos AG" --email user@example.com --password geheim --headless
+```
+
+Output: JSON with company details (name, address, employee count, authorized signatories, MwSt-Nr, purpose, etc.).
+
+**Setup:** Requires Playwright: `pip install playwright && playwright install chromium`
+
+---
+
+### [Morticia Publish](./morticia-publish/README.md)
+
+Publish files and websites to `https://baettig.org/morticia/`.
+
+**Usage:**
+```bash
+./morticia-publish/morticia-publish index.html style.css   # Upload files
+./morticia-publish/morticia-publish --list                  # List published files
+./morticia-publish/morticia-publish --sync-dir ./mysite/    # Sync whole directory
+./morticia-publish/morticia-publish --delete old-file.html  # Delete a file
+./morticia-publish/morticia-publish --index "My Collection" # Create index page
+```
+
+---
+
+### [YouTube MP3 Downloader](./YouTubeDownload/)
+
+Downloads a YouTube video as an MP3 file.
+
+**Usage:**
+```bash
+cd YouTubeDownload
+./yt2mp3.py https://www.youtube.com/watch?v=VIDEO_ID [output-dir]
+./upload.sh   # Upload to Google Drive
+```
+
+**Setup:** Requires `yt-dlp` and `ffmpeg`.
+
+---
+
+### [Security Scan](./SecurityScan/Requirements.md)
+
+Recursively scans Markdown files in a directory for potentially unsafe content using AI.
+
+**Usage:**
+```bash
+./SecurityScan/security_scan.py <start-directory> --days-back 7
+```
+
+Checks all `.md` files modified within the last N days. Uses `moonshotai/kimi-k2.5` via OpenRouter. Outputs JSON with `OK` or `DANGER` per file.
+
+---
 
 ## Architecture
 
 ```
 mb_tools_bar/
-├── venv/                           # Shared virtual environment
-├── CudosControllingTool/
-│   ├── cudos_controlling.py        # CLI tool
-│   └── README.md
-├── SalesReminderTool/
-│   ├── sales_reminder.py           # CLI tool
-│   └── README.md
-├── nzz-reader/                     # NZZ Reader CLI
-│   ├── nzz-reader                  # Main script
-│   └── README.md
-├── google-ai-search/               # Google AI Search CLI
-│   ├── google-ai-search            # Main script
-│   ├── config.json                 # API key config (git-ignored)
-│   └── README.md
-├── cudos-controlling               # Symlink → CudosControllingTool/cudos_controlling.py
-├── sales-reminder                  # Symlink → SalesReminderTool/sales_reminder.py
-├── requirements.txt                # All dependencies
-├── setup_venv.sh                   # Virtual environment setup
-├── README.md                       # This file
-└── CLAUDE.md                       # Development guidelines
+├── venv/                      # Shared virtual environment
+├── CudosControllingTool/      # RolX + Bexio CLI
+├── SalesReminderTool/         # Monthly email reminder
+├── SecurityScan/              # Markdown security scanner
+├── crm-ai-service/            # AI-powered CRM agent CLI
+├── crm-chat/                  # Web chat UI for CRM
+├── crm-rest/                  # CRM REST CLI
+├── google-ai-search/          # Google search + AI summaries
+├── moneyhouse-scraper/        # moneyhouse.ch scraper
+├── morticia-publish/          # File publisher to baettig.org
+├── nzz-reader/                # NZZ article reader
+├── sales_report/              # CRM → Google Sheets sales report
+├── YouTubeDownload/           # YouTube → MP3 downloader
+├── requirements.txt           # All dependencies
+├── setup_venv.sh              # Virtual environment setup
+├── .env.example               # Environment variable template
+└── CLAUDE.md                  # Development guidelines
 ```
-
-## CLI Tool Pattern
-
-All CLI tools follow a consistent architecture:
-
-1. **Command-line arguments** - Using `argparse` for subcommands and flags
-2. **Formatted output** - Pretty-printed by default, JSON mode with `--json` flag
-3. **UTF-8 support** - Proper handling of German umlauts and special characters
-4. **Exit codes** - 0 for success, 1 for errors
-5. **Consistent error handling** - Clear error messages to stderr
 
 ## Dependencies
 
-### Core (shared)
-- `requests>=2.31.0`
-- `python-dotenv>=1.0.0`
-
-### Cudos Controlling CLI
-- Python stdlib only (argparse, json, urllib)
-- Optional: python-dotenv (for .env file support)
-
-### Sales Reminder Tool
-- Python stdlib only (calendar, datetime)
-
-Install all dependencies:
+Install all:
 ```bash
 pip install -r requirements.txt
 ```
 
-## Development
-
-### Adding a New Tool
-
-1. Create directory: `NewToolCLI/`
-2. Add main script with `argparse` CLI interface
-3. Create tool-specific `README.md`
-4. Add dependencies to `requirements.txt`
-5. Create symlink in root: `ln -s NewToolCLI/tool_name.py new-tool`
-6. Update this README
-
-### Testing CLI Tools
-
-Test directly from the command line:
-
-```bash
-# Basic test
-./tool-name --help
-
-# Test functionality
-./tool-name subcommand "query or args"
-
-# Test JSON output
-./tool-name subcommand "query" --json | jq '.'
-```
+Key dependencies:
+- `requests>=2.31.0`
+- `python-dotenv>=1.0.0`
+- `playwright` (moneyhouse-scraper only)
+- `yt-dlp` (YouTubeDownload only)
 
 ## License
 
