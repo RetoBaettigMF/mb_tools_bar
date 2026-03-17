@@ -86,7 +86,7 @@ def notify_openclaw(subject, sender, message_id, label):
     # Label-Emoji
     emoji = "📧" if label == "INBOX" else "📤" if label == "Sent" else "📨"
     
-    text = f"{emoji} Neue Email in [{label}] von {sender}: {short_subject}"
+    text = f"{emoji} Neue Email in [{label}] von {sender}: {short_subject}. Bitte verarbeite sie jetzt gemäss prompts/AnswerEmails.md. Schreibe kurz auf meinen Telegram-Kanal, was läuft."
     
     try:
         result = subprocess.run(

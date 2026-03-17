@@ -61,16 +61,18 @@ check_env() {
 install_service() {
     log_info "Installiere gmail-trigger Service..."
     
-    # Python venv erstellen falls nicht vorhanden
+    # Virtual Environment im Parent-Verzeichnis verwenden
     VENV_PATH="${SCRIPT_DIR}/../venv"
     if [[ ! -d "$VENV_PATH" ]]; then
-        log_info "Erstelle Python Virtual Environment..."
-        python3 -m venv "$VENV_PATH"
+        log_error "Virtual Environment nicht gefunden: $VENV_PATH"
+        echo "Bitte zuerst das venv im Parent-Verzeichnis erstellen:"
+        echo "  cd ${SCRIPT_DIR}/.. && bash setup_venv.sh"
+        exit 1
     fi
-    
+
     # Requirements installieren
     log_info "Installiere Python Dependencies..."
-    "$VENV_PATH/bin/pip" install -q -r "${SCRIPT_DIR}/requirements.txt"
+    "$VENV_PATH/bin/pip" install -q -r "${SCRIPT_DIR}/../requirements.txt"
     
     # Service Datei erstellen
     cat > "$SERVICE_FILE" << EOF
