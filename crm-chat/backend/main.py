@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-CRM_AGENT_PATH = Path(__file__).parent.parent.parent / "crm-ai-service" / "crm_agent"
+CRM_AGENT_PATH = Path(__file__).parent.parent.parent / "crm-ai-service" / "crm_agent.py"
 
 app = FastAPI(title="CRM Chat API")
 
