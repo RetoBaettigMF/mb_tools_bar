@@ -94,7 +94,7 @@ def notify_openclaw(subject, sender, message_id, label):
             check=True,
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=120
         )
         logger.info(f"Benachrichtigt: {short_subject}")
         

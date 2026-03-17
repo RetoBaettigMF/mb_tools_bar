@@ -87,6 +87,7 @@ User=${USER}
 WorkingDirectory=${SCRIPT_DIR}
 Environment=PYTHONUNBUFFERED=1
 Environment=PATH=/home/${USER}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin
+Environment=XDG_RUNTIME_DIR=/run/user/$(id -u ${USER})
 EnvironmentFile=$(realpath "${SCRIPT_DIR}/../.env")
 ExecStart=${VENV_PATH}/bin/python ${SCRIPT_DIR}/gmail_trigger.py
 Restart=always
@@ -102,7 +103,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=read-only
-ReadWritePaths=/tmp
+ReadWritePaths=/tmp /home/${USER}/.openclaw
 
 [Install]
 WantedBy=multi-user.target
