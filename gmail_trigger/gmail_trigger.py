@@ -80,20 +80,23 @@ def notify_openclaw(subject, sender, message_id, label):
     if message_id in processed:
         logger.debug(f"Bereits verarbeitet: {message_id}")
         return False
-    
+
     # Kurzer subject
     short_subject = subject[:60] + "..." if len(subject) > 60 else subject
-    
+
     # Label-Emoji
     emoji = "📧" if label == "INBOX" else "📤" if label == "Sent" else "📨"
-    
+
     text = f"{emoji} Neue Email in [{label}] von {sender}: {short_subject}. Bitte verarbeite sie jetzt gemäss prompts/AnswerEmails.md. Schreibe kurz auf meinen Telegram-Kanal, was läuft."
-    
+
+    # Eindeutige Session-ID pro Email (verhindert Context-Overflow)
+    session_id = f"gmail-{int(time.time())}"
+
     try:
         subprocess.Popen(
-            ["openclaw", "agent", "--agent", Config.OPENCLAW_SESSION, "--message", text]
+            ["openclaw", "agent", "--agent", Config.OPENCLAW_SESSION, "--session-id", session_id, "--message", text]
         )
-        logger.info(f"Benachrichtigt: {short_subject}")
+        logger.info(f"Benachrichtigt (Session {session_id}): {short_subject}")
         processed.add(message_id)
         save_processed_ids(processed)
         return True
