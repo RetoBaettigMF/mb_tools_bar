@@ -53,3 +53,5 @@ uvloop==0.22.1
 watchfiles==1.1.1
 websockets==16.0
 yt-dlp==2026.3.13
+librosa>=0.10.0
+numpy>=1.22.0

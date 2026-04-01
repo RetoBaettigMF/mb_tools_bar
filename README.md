@@ -185,6 +185,22 @@ Publish files and websites to `https://baettig.org/morticia/`.
 
 ---
 
+### [BPM Sensor](./bpm-sensor/)
+
+Detects the BPM (Beats Per Minute) of an MP3 file by sampling 3 evenly-distributed sections and returning the median.
+
+**Usage:**
+```bash
+./bpm track.mp3
+./bpm track.mp3 --verbose     # Show per-section breakdown
+./bpm track.mp3 --json        # Full JSON output
+./bpm track.mp3 --sections 5 --window 20
+```
+
+**Setup:** Requires `librosa` and `numpy` (included in `requirements.txt`).
+
+---
+
 ### [YouTube MP3 Downloader](./YouTubeDownload/)
 
 Downloads a YouTube video as an MP3 file.
@@ -229,6 +245,7 @@ mb_tools_bar/
 ├── morticia-publish/          # File publisher to baettig.org
 ├── nzz-reader/                # NZZ article reader
 ├── sales_report/              # CRM → Google Sheets sales report
+├── bpm-sensor/                # MP3 BPM detector
 ├── YouTubeDownload/           # YouTube → MP3 downloader
 ├── requirements.txt           # All dependencies
 ├── setup_venv.sh              # Virtual environment setup
