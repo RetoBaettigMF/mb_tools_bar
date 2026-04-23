@@ -1,7 +1,0 @@
-session.json
-output.json
-*.png
-__pycache__/
-*.pyc
-venv/
-.env
