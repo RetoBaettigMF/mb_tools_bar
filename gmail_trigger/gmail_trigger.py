@@ -89,18 +89,24 @@ def notify_openclaw(subject, sender, message_id, label):
 
     text = f"{emoji} Neue Email in [{label}] von {sender}: {short_subject}. Bitte verarbeite sie jetzt gemäss prompts/AnswerEmails.md. Schreibe kurz auf meinen Telegram-Kanal, was läuft."
 
-    # Eindeutige Session-ID pro Email (verhindert Context-Overflow)
-    session_id = f"gmail-{int(time.time())}"
-
     try:
-        subprocess.Popen(
-            ["openclaw", "agent", "--agent", Config.OPENCLAW_SESSION, "--session-id", session_id, "--message", text]
+        result = subprocess.run(
+            ["openclaw", "agent", "--agent", Config.OPENCLAW_SESSION, "--message", text],
+            capture_output=True, text=True, timeout=120
         )
-        logger.info(f"Benachrichtigt (Session {session_id}): {short_subject}")
+        if result.returncode == 0:
+            logger.info(f"Benachrichtigt: {short_subject}")
+            if result.stdout.strip():
+                logger.info(f"Agent response: {result.stdout.strip()[:200]}")
+        else:
+            logger.error(f"openclaw Fehler (exit {result.returncode}): {result.stderr.strip()[:300]}")
+            return False
         processed.add(message_id)
         save_processed_ids(processed)
         return True
 
+    except subprocess.TimeoutExpired:
+        logger.error("openclaw agent Timeout nach 120s")
     except Exception as e:
         logger.error(f"Fehler beim Benachrichtigen: {e}")
 
