@@ -1,211 +1,118 @@
 #!/bin/bash
-#
-# install.sh - Installiert gmail_trigger als systemd Service
-#
-# Verwendung:
-#   sudo ./install.sh              # Installiert und startet Service
-#   sudo ./install.sh --remove     # Entfernt Service
-#   sudo ./install.sh --status     # Zeigt Service-Status
+# install.sh - Richtet gmail-trigger als systemd User-Service ein
 
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_NAME="gmail-trigger"
-SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-USER="${SUDO_USER:-$USER}"
+SERVICE_DIR="${HOME}/.config/systemd/user"
+SERVICE_FILE="${SERVICE_DIR}/${SERVICE_NAME}.service"
 
-# Farben
-RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+RED='\033[0;31m'
+NC='\033[0m'
 
-log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
-}
+info()  { echo -e "${GREEN}[INFO]${NC}  $1"; }
+warn()  { echo -e "${YELLOW}[WARN]${NC}  $1"; }
+error() { echo -e "${RED}[ERROR]${NC} $1"; }
 
-log_warn() {
-    echo -e "${YELLOW}[WARN]${NC} $1"
-}
+check_deps() {
+    local missing=()
+    command -v gog      &>/dev/null || missing+=("gog")
+    command -v openclaw &>/dev/null || missing+=("openclaw")
 
-log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-check_root() {
-    if [[ $EUID -ne 0 ]]; then
-        log_error "Dieses Script muss als root laufen. Bitte mit sudo ausführen."
+    if [[ ${#missing[@]} -gt 0 ]]; then
+        error "Fehlende Programme: ${missing[*]}"
+        echo "Bitte erst installieren, dann erneut ausführen."
         exit 1
     fi
-}
 
-check_env() {
-    ENV_FILE="$(realpath "${SCRIPT_DIR}/../.env")"
-    if [[ ! -f "$ENV_FILE" ]]; then
-        log_error ".env Datei nicht gefunden: $ENV_FILE"
-        echo "Bitte zuerst .env aus .env.example erstellen:"
-        echo "  cp ${SCRIPT_DIR}/../.env.example ${SCRIPT_DIR}/../.env"
-        echo "  nano ${SCRIPT_DIR}/../.env"
-        exit 1
-    fi
-    
-    # Prüfe ob required vars gesetzt
-    if ! grep -q "GMAIL_EMAIL=" "$ENV_FILE" || ! grep -q "GMAIL_APP_PASSWORD=" "$ENV_FILE"; then
-        log_error "GMAIL_EMAIL oder GMAIL_APP_PASSWORD nicht in .env gesetzt!"
-        exit 1
-    fi
-    
-    log_info ".env gefunden und konfiguriert"
+    info "Abhängigkeiten OK (gog, openclaw)"
 }
 
 install_service() {
-    log_info "Installiere gmail-trigger Service..."
-    
-    # Virtual Environment im Parent-Verzeichnis verwenden
-    VENV_PATH="$(realpath "${SCRIPT_DIR}/../venv")"
-    if [[ ! -d "$VENV_PATH" ]]; then
-        log_error "Virtual Environment nicht gefunden: $VENV_PATH"
-        echo "Bitte zuerst das venv im Parent-Verzeichnis erstellen:"
-        echo "  cd ${SCRIPT_DIR}/.. && bash setup_venv.sh"
-        exit 1
-    fi
+    mkdir -p "$SERVICE_DIR"
 
-    # Requirements installieren
-    log_info "Installiere Python Dependencies..."
-    "$VENV_PATH/bin/pip" install -q -r "$(realpath "${SCRIPT_DIR}/../requirements.txt")"
-    
-    # PATH zusammenbauen inkl. Linuxbrew (für openclaw)
-    SERVICE_PATH="/home/${USER}/.npm-global/bin:/usr/local/bin:/usr/bin:/bin"
-    if [[ -d "/home/linuxbrew/.linuxbrew/bin" ]]; then
-        SERVICE_PATH="/home/linuxbrew/.linuxbrew/bin:${SERVICE_PATH}"
-        log_info "Linuxbrew gefunden - wird in PATH aufgenommen"
-    fi
+    # PATH aus der aktuellen Shell-Session übernehmen
+    local service_path="$PATH"
 
-    # Service Datei erstellen
     cat > "$SERVICE_FILE" << EOF
 [Unit]
 Description=Gmail Trigger for OpenClaw
 After=network.target
-Wants=network.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-User=${USER}
 WorkingDirectory=${SCRIPT_DIR}
-Environment=PYTHONUNBUFFERED=1
-Environment=PATH=${SERVICE_PATH}
-Environment=XDG_RUNTIME_DIR=/run/user/$(id -u ${USER})
-EnvironmentFile=$(realpath "${SCRIPT_DIR}/../.env")
-ExecStart=${VENV_PATH}/bin/python ${SCRIPT_DIR}/gmail_trigger.py
+Environment=PATH=${service_path}
+ExecStart=${SCRIPT_DIR}/gmail_trigger.sh
 Restart=always
-RestartSec=10
+RestartSec=30
 
-# Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=gmail-trigger
-
-# Security
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=read-only
-ReadWritePaths=/tmp /home/${USER}/.openclaw
+SyslogIdentifier=${SERVICE_NAME}
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
-    
-    log_info "Service-Datei erstellt: $SERVICE_FILE"
-    
-    # Systemd neu laden
-    systemctl daemon-reload
-    
-    # Service aktivieren
-    systemctl enable "$SERVICE_NAME"
-    log_info "Service aktiviert (startet automatisch beim Boot)"
-    
-    # Service starten
-    systemctl start "$SERVICE_NAME"
-    log_info "Service gestartet"
-    
-    # Status anzeigen
+
+    info "Service-Datei erstellt: $SERVICE_FILE"
+
+    systemctl --user daemon-reload
+    systemctl --user enable "$SERVICE_NAME"
+    systemctl --user start  "$SERVICE_NAME"
+
+    # Lingering aktivieren: Service läuft auch ohne aktive Login-Session
+    if loginctl enable-linger "$USER" 2>/dev/null; then
+        info "Lingering aktiviert – Service startet auch ohne Login"
+    else
+        warn "Lingering konnte nicht aktiviert werden (kein sudo?). Service läuft nur bei aktiver Session."
+    fi
+
     sleep 1
     show_status
-}
-
-remove_service() {
-    log_info "Entferne gmail-trigger Service..."
-    
-    # Service stoppen
-    systemctl stop "$SERVICE_NAME" 2>/dev/null || true
-    
-    # Service deaktivieren
-    systemctl disable "$SERVICE_NAME" 2>/dev/null || true
-    
-    # Service-Datei löschen
-    if [[ -f "$SERVICE_FILE" ]]; then
-        rm "$SERVICE_FILE"
-        log_info "Service-Datei entfernt"
-    fi
-    
-    # Systemd neu laden
-    systemctl daemon-reload
-    
-    log_info "Service entfernt"
+    info "Installation abgeschlossen."
 }
 
 show_status() {
     echo ""
     echo "=== Service Status ==="
-    systemctl status "$SERVICE_NAME" --no-pager || true
+    systemctl --user status "$SERVICE_NAME" --no-pager || true
     echo ""
     echo "=== Letzte Logs ==="
-    journalctl -u "$SERVICE_NAME" -n 20 --no-pager || true
+    journalctl --user -u "$SERVICE_NAME" -n 15 --no-pager || true
     echo ""
     echo "=== Nützliche Befehle ==="
-    echo "Status prüfen:  sudo systemctl status $SERVICE_NAME"
-    echo "Logs anzeigen:  sudo journalctl -u $SERVICE_NAME -f"
-    echo "Neu starten:    sudo systemctl restart $SERVICE_NAME"
-    echo "Stoppen:        sudo systemctl stop $SERVICE_NAME"
+    echo "  Logs live:    journalctl --user -u $SERVICE_NAME -f"
+    echo "  Neu starten:  systemctl --user restart $SERVICE_NAME"
+    echo "  Stoppen:      systemctl --user stop $SERVICE_NAME"
+    echo "  Deinstall:    ./uninstall.sh"
 }
 
 show_help() {
-    echo "Gmail Trigger - Installation Script"
+    echo "Gmail Trigger – Install Script"
     echo ""
     echo "Verwendung:"
-    echo "  sudo ./install.sh         Installiert und startet den Service"
-    echo "  sudo ./install.sh --remove   Entfernt den Service"
-    echo "  sudo ./install.sh --status   Zeigt Service-Status und Logs"
-    echo "  ./install.sh --help          Zeigt diese Hilfe"
+    echo "  ./install.sh           Installiert und startet den Service"
+    echo "  ./install.sh --status  Zeigt Status und Logs"
+    echo "  ./install.sh --help    Diese Hilfe"
     echo ""
-    echo "Voraussetzungen:"
-    echo "  1. .env Datei im Parent-Verzeichnis (~/Development/mb_tools_bar/.env)"
-    echo "  2. GMAIL_EMAIL und GMAIL_APP_PASSWORD in .env gesetzt"
-    echo "  3. openclaw CLI muss verfügbar sein"
+    echo "Für Deinstallation: ./uninstall.sh"
 }
 
-# Main
-if [[ "$1" == "--help" || "$1" == "-h" ]]; then
-    show_help
-    exit 0
-fi
-
-if [[ "$1" == "--remove" ]]; then
-    check_root
-    remove_service
-    exit 0
-fi
-
-if [[ "$1" == "--status" ]]; then
-    show_status
-    exit 0
-fi
-
-# Default: Installieren
-check_root
-check_env
-install_service
-
-log_info "Installation abgeschlossen!"
-log_info "Emails werden jetzt überwacht und an OpenClaw gesendet."
+case "${1:-}" in
+    --help|-h) show_help; exit 0 ;;
+    --status)  show_status; exit 0 ;;
+    "")
+        check_deps
+        install_service
+        ;;
+    *)
+        error "Unbekannte Option: $1"
+        show_help
+        exit 1
+        ;;
+esac
